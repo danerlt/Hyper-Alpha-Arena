@@ -628,11 +628,13 @@ export default function HyperAiPage() {
             ))
           } else if (eventType === 'reasoning' && data.content) {
             reasoning += data.content
+            const reasoningText = data.content as string
             setMessages(prev => prev.map((m, idx) =>
               idx === prev.length - 1 && m.isStreaming
                 ? {
                     ...m,
-                    toolCalls: [...(m.toolCalls || []), { type: 'reasoning', content: data.content as string }],
+                    statusText: `Thinking: ${reasoningText.slice(0, 80)}...`,
+                    toolCalls: [...(m.toolCalls || []), { type: 'reasoning', content: reasoningText }],
                   }
                 : m
             ))

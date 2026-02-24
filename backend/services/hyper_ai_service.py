@@ -41,6 +41,7 @@ from services.ai_decision_service import (
     is_reasoning_model,
     extract_reasoning,
     convert_tools_to_anthropic,
+    convert_messages_to_anthropic,
     strip_thinking_tags,
 )
 from services.ai_stream_service import (
@@ -608,10 +609,11 @@ def stream_chat_response(
 
             # Use unified payload builder (see build_llm_payload in ai_decision_service)
             if api_format == "anthropic":
+                sys_prompt, anthropic_messages = convert_messages_to_anthropic(messages)
                 anthropic_tools = convert_tools_to_anthropic(tools) if tools and not is_last_round else None
                 body = build_llm_payload(
                     model=model,
-                    messages=messages,
+                    messages=[{"role": "system", "content": sys_prompt}] + anthropic_messages,
                     api_format=api_format,
                     tools=anthropic_tools,
                 )

@@ -392,10 +392,12 @@ export default function AiPromptChatModal({
         m.id === msgId ? { ...m, statusText: `${t('aiPrompt.retrying', 'Retrying')} (${data.attempt}/${data.max_retries})` } : m
       ))
     } else if (eventType === 'reasoning') {
+      const reasoningText = data.content as string || ''
       setMessages(prev => prev.map(m =>
         m.id === msgId ? {
           ...m,
-          toolCalls: [...(m.toolCalls || []), { type: 'reasoning', content: data.content as string }],
+          statusText: `Thinking: ${reasoningText.slice(0, 80)}...`,
+          toolCalls: [...(m.toolCalls || []), { type: 'reasoning', content: reasoningText }],
         } : m
       ))
     } else if (eventType === 'tool_call') {
