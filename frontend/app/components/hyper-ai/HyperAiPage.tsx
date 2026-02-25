@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -43,7 +44,8 @@ import {
   Wrench,
   Play,
   Brain,
-  MessageCircle
+  MessageCircle,
+  Blocks
 } from 'lucide-react'
 import { pollAiStream } from '@/lib/pollAiStream'
 
@@ -90,6 +92,14 @@ interface CompressionPoint {
   message_id: number
   summary: string
   compressed_at: string
+}
+
+interface SkillInfo {
+  name: string
+  description: string
+  description_zh: string
+  command: string
+  enabled: boolean
 }
 
 interface TokenUsage {
@@ -472,6 +482,11 @@ export default function HyperAiPage() {
   const [showConfig, setShowConfig] = useState(true)
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [showMemoryModal, setShowMemoryModal] = useState(false)
+  const [skills, setSkills] = useState<SkillInfo[]>([])
+  const [activeSkill, setActiveSkill] = useState<string | null>(null)
+  const [skillsLoading, setSkillsLoading] = useState(false)
+  const [skillsEditMode, setSkillsEditMode] = useState(false)
+  const [pendingSkillToggles, setPendingSkillToggles] = useState<Record<string, boolean>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -482,6 +497,7 @@ export default function HyperAiPage() {
     fetchConversations()
     fetchProviders()
     fetchProfile()
+    fetchSkills()
   }, [])
 
   useEffect(() => {
@@ -540,12 +556,70 @@ export default function HyperAiPage() {
     }
   }
 
+  const fetchSkills = async () => {
+    try {
+      const res = await fetch('/api/hyper-ai/skills')
+      const data = await res.json()
+      setSkills(data.skills || [])
+    } catch (e) {
+      console.error('Failed to fetch skills:', e)
+    }
+  }
+
+  const toggleSkill = async (skillName: string, enabled: boolean) => {
+    setSkillsLoading(true)
+    try {
+      await fetch(`/api/hyper-ai/skills/${skillName}/toggle`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      })
+      setSkills(prev => prev.map(s =>
+        s.name === skillName ? { ...s, enabled } : s
+      ))
+    } catch (e) {
+      console.error('Failed to toggle skill:', e)
+    } finally {
+      setSkillsLoading(false)
+    }
+  }
+
+  const handleSkillsEditSave = async () => {
+    setSkillsLoading(true)
+    try {
+      for (const [name, enabled] of Object.entries(pendingSkillToggles)) {
+        await fetch(`/api/hyper-ai/skills/${name}/toggle`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        })
+      }
+      setSkills(prev => prev.map(s =>
+        pendingSkillToggles[s.name] !== undefined
+          ? { ...s, enabled: pendingSkillToggles[s.name] }
+          : s
+      ))
+    } catch (e) {
+      console.error('Failed to save skill toggles:', e)
+    } finally {
+      setSkillsLoading(false)
+      setSkillsEditMode(false)
+      setPendingSkillToggles({})
+    }
+  }
+
+  const handleSkillsEditCancel = () => {
+    setSkillsEditMode(false)
+    setPendingSkillToggles({})
+  }
+
   const handleNewConversation = () => {
     // Lazy creation: just clear current state, don't create in DB yet
     setCurrentConvId(null)
     setMessages([])
     setCompressionPoints([])
     setTokenUsage(null)
+    setActiveSkill(null)
   }
 
   const handleSend = async () => {
@@ -660,6 +734,8 @@ export default function HyperAiPage() {
                   }
                 : m
             ))
+          } else if (eventType === 'skill_loaded' && data.skill_name) {
+            setActiveSkill(data.skill_name as string)
           } else if (eventType === 'subagent_progress') {
             const agent = data.subagent || 'Agent'
             let statusMsg = ''
@@ -892,12 +968,12 @@ export default function HyperAiPage() {
       {showConfig && (
         <div className="w-[500px] border-l p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-medium flex items-center gap-2">
-              <Settings className="w-4 h-4" />
+            <h3 className="text-sm font-medium flex items-center gap-1.5">
+              <Settings className="w-4 h-4 shrink-0" />
               {t('hyperAi.configTitle', 'Hyper AI Config')}
             </h3>
-            <Button variant="ghost" size="icon" onClick={() => setShowConfigModal(true)}>
-              <Pencil className="w-4 h-4" />
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowConfigModal(true)}>
+              <Pencil className="w-3.5 h-3.5" />
             </Button>
           </div>
 
@@ -927,26 +1003,98 @@ export default function HyperAiPage() {
           <div className="pt-4 border-t">
             <button
               onClick={() => setShowMemoryModal(true)}
-              className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-muted/50 transition-colors text-left"
+              className="w-full flex items-center gap-1.5 py-1 rounded-lg text-sm hover:bg-muted/50 transition-colors text-left"
             >
               <Brain className="w-4 h-4 text-primary shrink-0" />
-              <span className="font-medium">{t('hyperAi.memory.button', 'Memory')}</span>
-              <ChevronRight className="w-3 h-3 text-muted-foreground ml-auto" />
+              <span className="text-sm font-medium">{t('hyperAi.memory.button', 'Memory')}</span>
+              <ChevronRight className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
             </button>
           </div>
 
           <div className="pt-4 border-t">
-            <h4 className="text-sm font-medium text-muted-foreground mb-2">
-              {t('hyperAi.skills', 'Skills')}
-            </h4>
-            <p className="text-xs text-muted-foreground">
-              {t('hyperAi.skillsComingSoon', 'Coming soon...')}
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-sm font-medium flex items-center gap-1.5">
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 1024 1024" fill="currentColor">
+                  <path d="M556.8 960H166.4c-25.6 0-51.2-12.8-70.4-25.6-19.2-19.2-32-44.8-32-70.4v-115.2c6.4-19.2 12.8-38.4 32-51.2 12.8-6.4 19.2-12.8 32-12.8s25.6 6.4 44.8 12.8H192c12.8 6.4 19.2 6.4 32 6.4s25.6 0 32-6.4c12.8-6.4 19.2-12.8 25.6-19.2 6.4-6.4 12.8-19.2 19.2-25.6 6.4-12.8 6.4-19.2 6.4-32s0-25.6-6.4-32c-6.4-12.8-12.8-19.2-19.2-25.6s-19.2-12.8-25.6-19.2c-12.8-6.4-19.2-6.4-32-6.4s-19.2 0-32 6.4h-6.4-6.4c-6.4 6.4-19.2 6.4-25.6 12.8-12.8 6.4-25.6 6.4-38.4 6.4-19.2 0-32-12.8-38.4-25.6-6.4-12.8-12.8-25.6-12.8-44.8V390.4c0-25.6 12.8-51.2 32-70.4 19.2-19.2 44.8-32 70.4-32h83.2c-6.4-19.2-6.4-32-6.4-51.2 0-25.6 6.4-51.2 12.8-70.4l38.4-57.6c19.2-19.2 38.4-32 57.6-38.4 25.6-12.8 44.8-12.8 70.4-12.8s51.2 6.4 70.4 12.8l57.6 38.4c19.2 19.2 32 38.4 38.4 57.6 12.8 25.6 12.8 44.8 12.8 70.4 0 19.2 0 38.4-6.4 51.2h25.6c25.6 0 51.2 12.8 70.4 32 19.2 19.2 25.6 44.8 25.6 70.4v19.2c0 12.8-12.8 32-38.4 32-25.6 0-32-12.8-38.4-25.6v-25.6c0-6.4 0-12.8-6.4-19.2-6.4-6.4-6.4-6.4-19.2-6.4H441.6l51.2-64c19.2-19.2 25.6-38.4 25.6-64 0-12.8 0-32-6.4-44.8-6.4-12.8-12.8-25.6-25.6-32-12.8-12.8-19.2-19.2-32-25.6-12.8-6.4-25.6-6.4-44.8-6.4-12.8 0-25.6 0-44.8 6.4-12.8 6.4-25.6 12.8-32 25.6-12.8 12.8-19.2 19.2-25.6 32-6.4 12.8-6.4 25.6-6.4 44.8 0 12.8 0 25.6 6.4 38.4 6.4 12.8 12.8 25.6 19.2 32l51.2 64H153.6c-6.4 0-12.8 0-19.2 6.4-6.4 6.4-6.4 12.8-6.4 19.2v89.6s6.4 0 6.4-6.4c6.4 0 6.4-6.4 12.8-6.4 19.2-6.4 38.4-12.8 64-12.8 19.2 0 44.8 6.4 64 12.8 19.2 6.4 38.4 19.2 51.2 32 12.8 12.8 25.6 32 32 51.2 6.4 19.2 12.8 38.4 12.8 64 0 19.2-6.4 44.8-12.8 64-6.4 19.2-19.2 38.4-32 51.2-12.8 12.8-32 25.6-51.2 32-19.2 6.4-38.4 12.8-64 12.8-19.2 0-44.8-6.4-64-12.8-6.4 0-12.8-6.4-19.2-6.4v96c0 6.4 0 12.8 6.4 19.2 6.4 6.4 12.8 6.4 19.2 6.4h396.8c19.2 6.4 25.6 19.2 25.6 38.4 6.4 25.6 0 32-19.2 38.4z m204.8-76.8c-6.4-6.4-25.6-19.2-32-19.2-6.4 0-25.6 12.8-32 19.2-6.4 6.4-19.2 12.8-25.6 12.8-6.4 0-12.8 0-12.8-6.4l-51.2-25.6c-12.8-12.8-19.2-25.6-12.8-44.8 0 0 6.4-6.4 6.4-12.8 0-12.8-6.4-19.2-12.8-25.6-6.4-6.4-19.2-12.8-25.6-12.8-12.8 0-25.6-12.8-32-32 0 0-6.4-25.6-6.4-44.8 0-19.2 6.4-44.8 6.4-44.8 6.4-19.2 12.8-32 32-32s38.4-19.2 38.4-38.4c0-6.4-6.4-12.8-6.4-12.8-6.4-19.2 0-38.4 12.8-44.8l57.6-32c6.4 0 12.8-6.4 12.8-6.4 12.8 0 19.2 6.4 25.6 12.8 6.4 6.4 25.6 19.2 32 19.2 6.4 0 25.6-12.8 32-19.2 6.4-6.4 19.2-12.8 25.6-12.8 6.4 0 12.8 0 12.8 6.4l51.2 25.6c12.8 12.8 19.2 25.6 12.8 44.8 0 0-6.4 6.4-6.4 12.8 0 19.2 19.2 38.4 38.4 38.4 12.8 0 25.6 12.8 32 32 0 0 6.4 25.6 6.4 44.8 0 19.2-6.4 44.8-6.4 44.8-6.4 19.2-12.8 32-32 32-12.8 0-19.2 6.4-25.6 12.8s-12.8 19.2-12.8 25.6c0 6.4 6.4 12.8 6.4 12.8 6.4 19.2 0 38.4-12.8 44.8l-57.6 32c-6.4 0-12.8 6.4-12.8 6.4-12.8 0-19.2-6.4-25.6-12.8z m-38.4-70.4c19.2 0 32 6.4 51.2 19.2 6.4 6.4 12.8 6.4 12.8 12.8l32-19.2c0-6.4 0-12.8-6.4-25.6 0-44.8 32-83.2 76.8-89.6v-19.2-19.2c-44.8-6.4-76.8-44.8-76.8-89.6 0-6.4 0-19.2 6.4-25.6l-32-19.2-12.8 12.8c-19.2 12.8-32 19.2-51.2 19.2s-32-6.4-51.2-19.2c-6.4-6.4-12.8-6.4-12.8-12.8l-32 19.2c0 6.4 6.4 12.8 6.4 25.6 0 44.8-32 83.2-76.8 89.6v38.4c44.8 6.4 76.8 44.8 76.8 89.6 0 6.4 0 19.2-6.4 25.6l25.6 12.8 12.8-12.8c25.6-6.4 44.8-12.8 57.6-12.8z m0-38.4c-44.8 0-83.2-38.4-83.2-83.2 0-44.8 38.4-83.2 83.2-83.2 44.8 0 83.2 38.4 83.2 83.2 6.4 44.8-32 83.2-83.2 83.2z m0-115.2c-6.4 0-19.2 6.4-25.6 6.4-6.4 6.4-6.4 12.8-6.4 25.6 0 19.2 12.8 32 32 32s32-12.8 32-32-12.8-32-32-32z" />
+                </svg>
+                {t('hyperAi.skills', 'Skills')}
+              </h4>
+              {skills.length > 0 && !skillsEditMode && (
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSkillsEditMode(true)}>
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground/60 mb-2 px-0.5">
+              {t('hyperAi.skillsHint', 'Auto-loaded by AI, or type /command')}
             </p>
+            {skills.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {t('hyperAi.skillsLoading', 'Loading...')}
+              </p>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  {skills.map(skill => {
+                    const isEnabled = pendingSkillToggles[skill.name] !== undefined
+                      ? pendingSkillToggles[skill.name]
+                      : skill.enabled
+                    return (
+                      <div
+                        key={skill.name}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        {skillsEditMode ? (
+                          <Switch
+                            checked={isEnabled}
+                            onCheckedChange={v => setPendingSkillToggles(prev => ({ ...prev, [skill.name]: v }))}
+                            disabled={skillsLoading}
+                            className="scale-75 origin-left shrink-0"
+                          />
+                        ) : (
+                          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isEnabled ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+                        )}
+                        <span className="text-xs truncate flex-1">
+                          {t(`hyperAi.skillNames.${skill.name}`, skill.name)}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/50 shrink-0 font-mono">{skill.command}</span>
+                        {activeSkill === skill.name && (
+                          <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">
+                            {t('hyperAi.skillActive', 'Active')}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                {skillsEditMode && (
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSkillsEditCancel}
+                      className="h-7 px-3 text-xs"
+                    >
+                      {t('hyperAi.skillsCancel', 'Cancel')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSkillsEditSave}
+                      disabled={skillsLoading}
+                      className="h-7 px-3 text-xs"
+                    >
+                      {t('hyperAi.skillsSave', 'Save')}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Bot Integrations Preview */}
           <div className="pt-4 border-t">
-            <h4 className="text-sm font-medium text-muted-foreground mb-2">
+            <h4 className="text-sm font-medium flex items-center gap-1.5 mb-2">
+              <Blocks className="w-4 h-4 shrink-0" />
               {t('hyperAi.integrations', 'Integrations')}
             </h4>
             <div className="space-y-2">

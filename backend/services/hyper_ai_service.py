@@ -382,11 +382,12 @@ def build_messages_for_api(
     user_message: str,
     api_config: Dict[str, Any],
     include_tools: bool = True
-) -> tuple[List[Dict[str, str]], Optional[List[Dict]]]:
+) -> tuple[List[Dict[str, str]], Optional[List[Dict]], Optional[str]]:
     """
     Build message list for LLM API call with automatic compression.
     Uses compression_points to skip already-compressed messages.
-    Returns (messages, tools) tuple.
+    Returns (messages, tools, command_skill) tuple.
+    command_skill is set when user used /command mode (e.g. "/trader-diagnosis").
     """
     from services.ai_context_compression_service import (
         compress_messages, update_compression_points,
@@ -396,12 +397,47 @@ def build_messages_for_api(
 
     messages = []
 
-    # System prompt
+    # Load user profile (used for both skill filtering and personalization)
+    profile = get_or_create_profile(db)
+
+    # System prompt with Skill metadata injection
     system_prompt = load_system_prompt()
+
+    # Inject available skills into system prompt (Level 1: metadata only)
+    from services.hyper_ai_skill_engine import (
+        scan_all_skills, get_enabled_skills, build_skills_metadata_prompt
+    )
+    all_skills = scan_all_skills()
+    enabled_skills = get_enabled_skills(all_skills, profile.enabled_skills)
+    skills_prompt = build_skills_metadata_prompt(enabled_skills)
+    system_prompt = system_prompt.replace("{available_skills}", skills_prompt)
+
+    # /Command mode: detect /skill_name or /shortcut prefix and inject full SKILL.md
+    command_skill = None
+    # Build lookup maps: name -> name, shortcut -> name
+    skill_lookup = {}
+    for s in enabled_skills:
+        skill_lookup[s["name"]] = s["name"]
+        if s.get("shortcut"):
+            skill_lookup[s["shortcut"]] = s["name"]
+    if user_message.startswith("/"):
+        parts = user_message.split(None, 1)
+        candidate = parts[0][1:]  # strip leading /
+        resolved_name = skill_lookup.get(candidate)
+        if resolved_name:
+            from services.hyper_ai_skill_engine import load_skill
+            skill_result = load_skill(resolved_name)
+            if skill_result.get("success"):
+                command_skill = resolved_name
+                system_prompt += (
+                    f"\n\n## Active Skill: {resolved_name}\n\n"
+                    f"{skill_result['content']}"
+                )
+                user_message = parts[1].strip() if len(parts) > 1 else "Please start this skill workflow."
+
     messages.append({"role": "system", "content": system_prompt})
 
     # Get profile context for personalization
-    profile = get_or_create_profile(db)
     if profile.onboarding_completed:
         profile_context = _build_profile_context(profile)
         if profile_context:
@@ -467,7 +503,7 @@ def build_messages_for_api(
     # Return tools if requested (OpenAI format; Anthropic conversion happens in stream_chat_response)
     tools = HYPER_AI_TOOLS if include_tools else None
 
-    return messages, tools
+    return messages, tools, command_skill
 
 
 def _build_profile_context(profile: HyperAiProfile) -> str:
@@ -569,7 +605,11 @@ def stream_chat_response(
     save_message(db, conversation_id, "user", user_message)
 
     # Build messages (with automatic compression) and get tools
-    messages, tools = build_messages_for_api(db, conversation_id, user_message, llm_config)
+    messages, tools, command_skill = build_messages_for_api(db, conversation_id, user_message, llm_config)
+
+    # Emit skill_loaded event if /command mode was used
+    if command_skill:
+        yield format_sse_event("skill_loaded", {"skill_name": command_skill})
 
     # Prepare API call
     base_url = llm_config["base_url"]
@@ -766,6 +806,13 @@ def stream_chat_response(
                             tool_result = yield from execute_subagent_tool(db, fn_name, fn_args, user_id=1)
                         else:
                             tool_result = execute_hyper_ai_tool(db, fn_name, fn_args, user_id=1)
+
+                        # Emit skill_loaded event so frontend can show skill status
+                        if fn_name == "load_skill":
+                            yield format_sse_event("skill_loaded", {
+                                "skill_name": fn_args.get("skill_name", "")
+                            })
+
                         tool_calls_log.append({
                             "tool": fn_name,
                             "args": fn_args,
@@ -803,6 +850,13 @@ def stream_chat_response(
                             tool_result = yield from execute_subagent_tool(db, fn_name, fn_args, user_id=1)
                         else:
                             tool_result = execute_hyper_ai_tool(db, fn_name, fn_args, user_id=1)
+
+                        # Emit skill_loaded event so frontend can show skill status
+                        if fn_name == "load_skill":
+                            yield format_sse_event("skill_loaded", {
+                                "skill_name": fn_args.get("skill_name", "")
+                            })
+
                         tool_calls_log.append({
                             "tool": fn_name,
                             "args": fn_args,

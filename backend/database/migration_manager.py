@@ -66,6 +66,7 @@ MIGRATIONS = [
     "add_interrupt_reason_to_ai_messages.py",
     "031_hyper_ai_tables.py",
     "add_nickname_to_hyper_ai_profile.py",
+    "add_enabled_skills_to_hyper_ai_profile.py",
 ]
 
 

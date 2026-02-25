@@ -200,13 +200,16 @@ HYPER_AI_TOOLS = [
                         "items": {
                             "type": "object",
                             "properties": {
-                                "metric": {"type": "string", "description": "Metric name (e.g., cvd, oi_delta_percent, order_imbalance)"},
-                                "operator": {"type": "string", "description": "Comparison operator (greater_than, less_than, etc.)"},
-                                "threshold": {"type": "number", "description": "Threshold value"},
-                                "time_window": {"type": "string", "description": "Time window (e.g., 5m, 15m, 1h)"}
+                                "metric": {"type": "string", "description": "Metric name (e.g., cvd, oi_delta_percent, order_imbalance, taker_volume)"},
+                                "operator": {"type": "string", "description": "Comparison operator (greater_than, less_than, etc.). NOT used for taker_volume."},
+                                "threshold": {"type": "number", "description": "Threshold value. NOT used for taker_volume."},
+                                "time_window": {"type": "string", "description": "Time window (e.g., 5m, 15m, 1h)"},
+                                "direction": {"type": "string", "enum": ["buy", "sell", "any"], "description": "taker_volume ONLY: dominant side"},
+                                "ratio_threshold": {"type": "number", "description": "taker_volume ONLY: buy/sell ratio multiplier (e.g., 1.5 = 50% more)"},
+                                "volume_threshold": {"type": "number", "description": "taker_volume ONLY: minimum total volume in USD"}
                             }
                         },
-                        "description": "Array of signal conditions"
+                        "description": "Array of signal conditions. Standard signals use metric/operator/threshold/time_window. taker_volume uses metric/direction/ratio_threshold/volume_threshold/time_window instead."
                     },
                     "logic": {"type": "string", "enum": ["AND", "OR"], "description": "Logic operator (default: AND)"},
                     "exchange": {"type": "string", "enum": ["hyperliquid", "binance"], "description": "Exchange (default: hyperliquid)"},
@@ -369,11 +372,128 @@ HYPER_AI_TOOLS = [
                 "required": ["trader_id"]
             }
         }
+    },
+    # --- Update Tools ---
+    {
+        "type": "function",
+        "function": {
+            "name": "update_ai_trader",
+            "description": "Update AI Trader settings (name, LLM config). Tests LLM connection if model/base_url/api_key changes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "trader_id": {"type": "integer", "description": "AI Trader ID"},
+                    "name": {"type": "string", "description": "New display name"},
+                    "model": {"type": "string", "description": "New LLM model name"},
+                    "base_url": {"type": "string", "description": "New LLM API base URL"},
+                    "api_key": {"type": "string", "description": "New LLM API key"}
+                },
+                "required": ["trader_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_program_binding",
+            "description": "Update a program binding's configuration (signal pools, trigger interval, activation, params).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "binding_id": {"type": "integer", "description": "Program binding ID"},
+                    "signal_pool_ids": {"type": "array", "items": {"type": "integer"}, "description": "New signal pool IDs"},
+                    "trigger_interval": {"type": "integer", "description": "New trigger interval in seconds"},
+                    "scheduled_trigger_enabled": {"type": "boolean", "description": "Enable/disable scheduled trigger"},
+                    "is_active": {"type": "boolean", "description": "Activate or deactivate the binding"},
+                    "params_override": {"type": "object", "description": "Parameter overrides for the program"}
+                },
+                "required": ["binding_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_signal_pool",
+            "description": "Update signal pool settings (name, enabled, logic, signal_ids). Signal IDs must belong to the same exchange as the pool.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pool_id": {"type": "integer", "description": "Signal pool ID"},
+                    "pool_name": {"type": "string", "description": "New display name"},
+                    "enabled": {"type": "boolean", "description": "Enable or disable the pool"},
+                    "logic": {"type": "string", "enum": ["AND", "OR"], "description": "Logic operator"},
+                    "signal_ids": {"type": "array", "items": {"type": "integer"}, "description": "Replace signal definitions in this pool. All signals must match the pool's exchange."}
+                },
+                "required": ["pool_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_prompt_binding",
+            "description": "Update which prompt template is bound to an AI Trader. Replaces the current binding.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "trader_id": {"type": "integer", "description": "AI Trader ID"},
+                    "prompt_id": {"type": "integer", "description": "New prompt template ID to bind"}
+                },
+                "required": ["trader_id", "prompt_id"]
+            }
+        }
     }
 ]
 
-# Combine base tools with sub-agent tools
-HYPER_AI_TOOLS = HYPER_AI_TOOLS + SUBAGENT_TOOLS
+# --- Skill System Tools ---
+# These tools load workflow guidance into the AI's context (Level 2 & 3 loading).
+# They do NOT perform any actions — they provide step-by-step instructions
+# for the AI to follow when executing complex multi-step tasks.
+# See backend/skills/*/SKILL.md for skill definitions.
+SKILL_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "load_skill",
+            "description": "Load a skill workflow guide into your context. This does NOT perform any action — it provides you with step-by-step instructions for a specific task type. Use this when a user's request matches one of your available skills.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_name": {
+                        "type": "string",
+                        "description": "Name of the skill to load (e.g., 'prompt-strategy-setup', 'trader-diagnosis')"
+                    }
+                },
+                "required": ["skill_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "load_skill_reference",
+            "description": "Load a reference document from a skill's references/ directory. Use this when a loaded skill mentions additional reference materials you should consult.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_name": {
+                        "type": "string",
+                        "description": "Name of the skill"
+                    },
+                    "reference_file": {
+                        "type": "string",
+                        "description": "Filename of the reference document (e.g., 'signal-design-guide.md')"
+                    }
+                },
+                "required": ["skill_name", "reference_file"]
+            }
+        }
+    }
+]
+
+# Combine base tools + skill tools + sub-agent tools
+HYPER_AI_TOOLS = HYPER_AI_TOOLS + SKILL_TOOLS + SUBAGENT_TOOLS
 
 
 # =============================================================================
@@ -916,6 +1036,22 @@ def execute_save_signal_pool(
     from api.signal_routes import create_pool_from_config, SignalPoolConfigRequest
 
     try:
+        # Defensive validation for taker_volume signals
+        for i, sig in enumerate(signals):
+            if sig.get("metric") == "taker_volume":
+                missing = [f for f in ("direction", "ratio_threshold", "volume_threshold", "time_window")
+                           if not sig.get(f) and sig.get(f) != 0]
+                if missing or sig.get("operator"):
+                    return json.dumps({
+                        "error": f"Signal {i+1} (taker_volume) format error. "
+                                 f"taker_volume requires: direction, ratio_threshold, volume_threshold, time_window. "
+                                 f"Do NOT use operator/threshold for taker_volume.",
+                        "correct_example": {
+                            "metric": "taker_volume", "direction": "buy",
+                            "ratio_threshold": 1.5, "volume_threshold": 100000, "time_window": "5m"
+                        }
+                    })
+
         # Build request object for the existing API handler
         request = SignalPoolConfigRequest(
             name=pool_name,
@@ -1550,8 +1686,210 @@ def execute_update_trader_strategy(
 
 
 # =============================================================================
-# Tool Dispatcher
+# Update Tools
 # =============================================================================
+
+def execute_update_ai_trader(
+    db: Session, trader_id: int,
+    name: str = None, model: str = None,
+    base_url: str = None, api_key: str = None
+) -> str:
+    """Update AI Trader settings. Tests LLM connection if credentials change."""
+    from database.models import Account
+
+    try:
+        account = db.query(Account).filter(
+            Account.id == trader_id, Account.is_active == "true"
+        ).first()
+        if not account:
+            return json.dumps({"error": f"AI Trader {trader_id} not found"})
+
+        # Test LLM connection if any credential field changes
+        new_model = model or account.model
+        new_base_url = base_url or account.base_url
+        new_api_key = api_key or account.api_key
+        need_test = any([model, base_url, api_key])
+
+        if need_test and new_model and new_base_url and new_api_key:
+            from api.account_routes import test_llm_connection
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            test_result = loop.run_until_complete(test_llm_connection({
+                "model": new_model,
+                "base_url": new_base_url,
+                "api_key": new_api_key
+            }))
+            if not test_result.get("success"):
+                return json.dumps({
+                    "success": False,
+                    "error": "LLM connection test failed",
+                    "details": test_result.get("message", "Unknown error")
+                })
+
+        updated = []
+        if name:
+            account.name = name
+            updated.append("name")
+        if model:
+            account.model = model
+            updated.append("model")
+        if base_url:
+            account.base_url = base_url
+            updated.append("base_url")
+        if api_key:
+            account.api_key = api_key
+            updated.append("api_key")
+
+        db.commit()
+        return json.dumps({
+            "success": True, "trader_id": trader_id,
+            "trader_name": account.name,
+            "updated_fields": updated,
+            "llm_tested": need_test
+        }, indent=2)
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[update_ai_trader] Error: {e}")
+        return json.dumps({"error": str(e)})
+
+
+def execute_update_program_binding(
+    db: Session, binding_id: int,
+    signal_pool_ids: list = None, trigger_interval: int = None,
+    scheduled_trigger_enabled: bool = None, is_active: bool = None,
+    params_override: dict = None
+) -> str:
+    """Update a program binding's configuration."""
+    from database.models import AccountProgramBinding, Account
+
+    try:
+        binding = db.query(AccountProgramBinding).filter(
+            AccountProgramBinding.id == binding_id
+        ).first()
+        if not binding:
+            return json.dumps({"error": f"Program binding {binding_id} not found"})
+
+        updated = []
+        if signal_pool_ids is not None:
+            binding.signal_pool_ids = json.dumps(signal_pool_ids)
+            updated.append("signal_pool_ids")
+        if trigger_interval is not None:
+            binding.trigger_interval = trigger_interval
+            updated.append("trigger_interval")
+        if scheduled_trigger_enabled is not None:
+            binding.scheduled_trigger_enabled = scheduled_trigger_enabled
+            updated.append("scheduled_trigger_enabled")
+        if is_active is not None:
+            binding.is_active = is_active
+            updated.append("is_active")
+        if params_override is not None:
+            binding.params_override = json.dumps(params_override)
+            updated.append("params_override")
+
+        db.commit()
+        account = db.get(Account, binding.account_id)
+        return json.dumps({
+            "success": True, "binding_id": binding_id,
+            "trader_name": account.name if account else "unknown",
+            "updated_fields": updated
+        }, indent=2)
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[update_program_binding] Error: {e}")
+        return json.dumps({"error": str(e)})
+
+
+def execute_update_signal_pool(
+    db: Session, pool_id: int,
+    pool_name: str = None, enabled: bool = None, logic: str = None,
+    signal_ids: list = None
+) -> str:
+    """Update signal pool settings."""
+    from database.models import SignalPool, SignalDefinition
+
+    try:
+        pool = db.query(SignalPool).filter(SignalPool.id == pool_id).first()
+        if not pool:
+            return json.dumps({"error": f"Signal pool {pool_id} not found"})
+
+        updated = []
+
+        # Validate signal_ids exchange match
+        if signal_ids is not None:
+            pool_exchange = pool.exchange or "hyperliquid"
+            mismatched = []
+            for sid in signal_ids:
+                sig = db.query(SignalDefinition).filter(SignalDefinition.id == sid).first()
+                if not sig:
+                    return json.dumps({"error": f"Signal definition {sid} not found"})
+                sig_exchange = sig.exchange or "hyperliquid"
+                if sig_exchange != pool_exchange:
+                    mismatched.append(f"Signal {sid} ({sig_exchange})")
+            if mismatched:
+                return json.dumps({
+                    "error": f"Exchange mismatch: pool is {pool_exchange}, but {', '.join(mismatched)}"
+                })
+            pool.signal_ids = json.dumps(signal_ids)
+            updated.append("signal_ids")
+
+        if pool_name is not None:
+            pool.pool_name = pool_name
+            updated.append("pool_name")
+        if enabled is not None:
+            pool.enabled = enabled
+            updated.append("enabled")
+        if logic is not None:
+            pool.logic = logic
+            updated.append("logic")
+
+        db.commit()
+        return json.dumps({
+            "success": True, "pool_id": pool_id,
+            "pool_name": pool.pool_name,
+            "updated_fields": updated
+        }, indent=2)
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[update_signal_pool] Error: {e}")
+        return json.dumps({"error": str(e)})
+
+
+def execute_update_prompt_binding(db: Session, trader_id: int, prompt_id: int) -> str:
+    """Update which prompt is bound to a trader. Reuses upsert_binding."""
+    from database.models import Account, PromptTemplate
+    from repositories import prompt_repo
+
+    try:
+        account = db.query(Account).filter(Account.id == trader_id).first()
+        if not account:
+            return json.dumps({"error": f"AI Trader {trader_id} not found"})
+
+        template = db.get(PromptTemplate, prompt_id)
+        if not template:
+            return json.dumps({"error": f"Prompt template {prompt_id} not found"})
+
+        binding = prompt_repo.upsert_binding(
+            db, account_id=trader_id,
+            prompt_template_id=prompt_id, updated_by="hyper_ai"
+        )
+        return json.dumps({
+            "success": True, "binding_id": binding.id,
+            "trader_id": trader_id, "trader_name": account.name,
+            "prompt_id": prompt_id, "prompt_name": template.name
+        }, indent=2)
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[update_prompt_binding] Error: {e}")
+        return json.dumps({"error": str(e)})
 
 def execute_hyper_ai_tool(db: Session, tool_name: str, arguments: Dict[str, Any], user_id: int = 1) -> str:
     """Execute a Hyper AI tool by name."""
@@ -1690,6 +2028,51 @@ def execute_hyper_ai_tool(db: Session, tool_name: str, arguments: Dict[str, Any]
                 scheduled_trigger_enabled=arguments.get("scheduled_trigger_enabled"),
                 trigger_interval=arguments.get("trigger_interval")
             )
+
+        # --- Update tools ---
+        elif tool_name == "update_ai_trader":
+            return execute_update_ai_trader(
+                db, trader_id=arguments.get("trader_id"),
+                name=arguments.get("name"), model=arguments.get("model"),
+                base_url=arguments.get("base_url"), api_key=arguments.get("api_key")
+            )
+
+        elif tool_name == "update_program_binding":
+            return execute_update_program_binding(
+                db, binding_id=arguments.get("binding_id"),
+                signal_pool_ids=arguments.get("signal_pool_ids"),
+                trigger_interval=arguments.get("trigger_interval"),
+                scheduled_trigger_enabled=arguments.get("scheduled_trigger_enabled"),
+                is_active=arguments.get("is_active"),
+                params_override=arguments.get("params_override")
+            )
+
+        elif tool_name == "update_signal_pool":
+            return execute_update_signal_pool(
+                db, pool_id=arguments.get("pool_id"),
+                pool_name=arguments.get("pool_name"),
+                enabled=arguments.get("enabled"),
+                logic=arguments.get("logic"),
+                signal_ids=arguments.get("signal_ids")
+            )
+
+        elif tool_name == "update_prompt_binding":
+            return execute_update_prompt_binding(
+                db, trader_id=arguments.get("trader_id"),
+                prompt_id=arguments.get("prompt_id")
+            )
+
+        # --- Skill tools: load workflow guidance (no side effects) ---
+        elif tool_name == "load_skill":
+            from services.hyper_ai_skill_engine import load_skill
+            return json.dumps(load_skill(skill_name=arguments.get("skill_name", "")))
+
+        elif tool_name == "load_skill_reference":
+            from services.hyper_ai_skill_engine import load_skill_reference
+            return json.dumps(load_skill_reference(
+                skill_name=arguments.get("skill_name", ""),
+                reference_file=arguments.get("reference_file", "")
+            ))
 
         # Sub-agent tools are handled directly in hyper_ai_service.py main loop
         # via _execute_tool_with_progress() which uses yield from for progress events.

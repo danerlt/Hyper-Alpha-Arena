@@ -1439,6 +1439,13 @@ class HyperAiProfile(Base):
     llm_api_key_encrypted = Column(Text, nullable=True)  # Encrypted API key (use decrypt_private_key to read)
     llm_model = Column(String(100), nullable=True)  # Model name (e.g., gpt-4o, claude-opus-4-6)
 
+    # Skill System: Controls which Skill modules are active for this user.
+    # Skills are SKILL.md files in backend/skills/ that provide domain-specific
+    # workflow guidance to Hyper AI (e.g., strategy setup, diagnosis, market analysis).
+    # Format: JSON array of enabled skill names, e.g. ["prompt-strategy-setup", "market-analysis"]
+    # NULL = all skills enabled (default for new/existing users)
+    enabled_skills = Column(Text, nullable=True)
+
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
