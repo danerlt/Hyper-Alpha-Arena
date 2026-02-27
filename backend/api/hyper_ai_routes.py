@@ -217,10 +217,11 @@ def list_conversations(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
-    """List recent conversations (excluding onboarding conversations)."""
+    """List recent conversations (excluding onboarding). Bot conversations pinned first."""
     conversations = db.query(HyperAiConversation).filter(
         HyperAiConversation.is_onboarding != True
     ).order_by(
+        HyperAiConversation.is_bot_conversation.desc(),
         HyperAiConversation.updated_at.desc()
     ).limit(limit).all()
 
@@ -230,6 +231,7 @@ def list_conversations(
                 "id": c.id,
                 "title": c.title,
                 "message_count": c.message_count,
+                "is_bot_conversation": bool(c.is_bot_conversation),
                 "created_at": c.created_at.isoformat() if c.created_at else None,
                 "updated_at": c.updated_at.isoformat() if c.updated_at else None,
             }

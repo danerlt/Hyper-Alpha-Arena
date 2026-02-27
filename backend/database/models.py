@@ -1534,6 +1534,10 @@ class HyperAiConversation(Base):
     message_count = Column(Integer, default=0)  # Total messages before compression
     total_tokens = Column(Integer, default=0)  # Estimated total tokens (for compression trigger)
 
+    # Bot integration
+    is_bot_conversation = Column(Boolean, default=False)  # True if initiated from Telegram/Discord bot
+    bot_platform = Column(String(20), nullable=True)  # telegram / discord
+
     # Timestamps
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
@@ -1593,3 +1597,36 @@ CRYPTO_MIN_COMMISSION = 0.1  # $0.1 minimum commission
 CRYPTO_COMMISSION_RATE = 0.001  # 0.1% commission rate
 CRYPTO_MIN_ORDER_QUANTITY = 1
 CRYPTO_LOT_SIZE = 1
+
+
+# ============================================================================
+# Bot Integration
+# ============================================================================
+class BotConfig(Base):
+    """Bot platform configuration (Telegram / Discord)"""
+    __tablename__ = "bot_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    platform = Column(String(20), unique=True, nullable=False)  # telegram / discord
+    bot_token_encrypted = Column(Text, nullable=True)
+    bot_username = Column(String(100), nullable=True)
+    bot_app_id = Column(String(50), nullable=True)
+    status = Column(String(20), nullable=False, default="disconnected")
+    error_message = Column(Text, nullable=True)
+    webhook_url = Column(Text, nullable=True)  # Last successful webhook URL (for auto-restore on restart)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class BotChatBinding(Base):
+    """Track chat_ids that have interacted with the bot (for push broadcast)."""
+    __tablename__ = "bot_chat_bindings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    platform = Column(String(20), nullable=False)  # telegram / discord
+    chat_id = Column(String(100), nullable=False)
+    username = Column(String(100), nullable=True)
+    display_name = Column(String(200), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    last_message_at = Column(TIMESTAMP, server_default=func.current_timestamp())

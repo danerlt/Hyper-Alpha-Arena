@@ -129,3 +129,21 @@ async def update_global_sampling_config(payload: dict, db: Session = Depends(get
     except Exception as e:
         logger.error(f"Failed to update global sampling config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update global sampling config: {str(e)}")
+
+
+# Generic system config update - must be after specific routes to avoid path conflicts
+class ConfigValueRequest(BaseModel):
+    value: str
+
+
+@router.put("/{key}")
+async def update_system_config(key: str, payload: ConfigValueRequest, db: Session = Depends(get_db)):
+    """Update a single system config value by key."""
+    config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+    if config:
+        config.value = payload.value
+    else:
+        config = SystemConfig(key=key, value=payload.value)
+        db.add(config)
+    db.commit()
+    return {"success": True, "key": key, "value": payload.value}

@@ -475,6 +475,16 @@ def on_startup():
     threading.Thread(target=warmup_numba, daemon=True).start()
 
 
+@app.on_event("startup")
+async def restore_bot_webhooks():
+    """Restore Telegram webhook after container restart."""
+    try:
+        from services.telegram_bot_service import restore_telegram_webhook
+        await restore_telegram_webhook()
+    except Exception as e:
+        print(f"[startup] Telegram webhook restore failed (non-fatal): {e}")
+
+
 @app.on_event("shutdown")
 def on_shutdown():
     # Shutdown all services (scheduler, market data tasks, auto trading, etc.)
@@ -508,6 +518,7 @@ from api.system_routes import router as system_router
 from api.binance_routes import router as binance_router
 from api.ai_stream_routes import router as ai_stream_router
 from api.hyper_ai_routes import router as hyper_ai_router
+from api.bot_routes import router as bot_router
 from routes.program_routes import router as program_router
 # Removed: AI account routes merged into account_routes (unified AI trader accounts)
 
@@ -537,6 +548,7 @@ app.include_router(system_router)
 app.include_router(binance_router)
 app.include_router(ai_stream_router)
 app.include_router(hyper_ai_router)
+app.include_router(bot_router)
 # app.include_router(ai_account_router, prefix="/api")  # Removed - merged into account_router
 
 # Strategy route aliases for frontend compatibility

@@ -48,11 +48,13 @@ import {
   Blocks
 } from 'lucide-react'
 import { pollAiStream } from '@/lib/pollAiStream'
+import BotIntegrationModal from './BotIntegrationModal'
 
 interface Conversation {
   id: number
   title: string
   message_count: number
+  is_bot_conversation?: boolean
   updated_at: string
 }
 
@@ -441,6 +443,14 @@ function LLMConfigModal({
 }
 
 // Welcome message component
+function BotConvIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0 text-[#26A5E4]" fill="currentColor">
+      <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+    </svg>
+  )
+}
+
 function WelcomeMessage({ nickname, t }: { nickname?: string; t: any }) {
   const greeting = nickname
     ? t('hyperAi.welcomeWithName', { name: nickname, defaultValue: `你好，${nickname}！我是 Hyper AI，你的专属交易助手。` })
@@ -487,6 +497,8 @@ export default function HyperAiPage() {
   const [skillsLoading, setSkillsLoading] = useState(false)
   const [skillsEditMode, setSkillsEditMode] = useState(false)
   const [pendingSkillToggles, setPendingSkillToggles] = useState<Record<string, boolean>>({})
+  const [showBotModal, setShowBotModal] = useState(false)
+  const [botConfig, setBotConfig] = useState<{ platform: string; bot_username: string | null; status: string } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -498,6 +510,7 @@ export default function HyperAiPage() {
     fetchProviders()
     fetchProfile()
     fetchSkills()
+    fetchBotConfig()
   }, [])
 
   useEffect(() => {
@@ -510,6 +523,16 @@ export default function HyperAiPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent])
+
+  const fetchBotConfig = async () => {
+    try {
+      const res = await fetch('/api/bot/config/telegram')
+      const data = await res.json()
+      setBotConfig(data.config || null)
+    } catch (e) {
+      console.error('Failed to fetch bot config:', e)
+    }
+  }
 
   const fetchConversations = async () => {
     try {
@@ -878,18 +901,26 @@ export default function HyperAiPage() {
                 key={conv.id}
                 onClick={() => setCurrentConvId(conv.id)}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                  conv.is_bot_conversation ? 'border-l-2 border-blue-500 ' : ''
+                }${
                   currentConvId === conv.id
                     ? 'bg-secondary text-secondary-foreground'
                     : 'hover:bg-muted text-muted-foreground'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 flex-shrink-0" />
+                  {conv.is_bot_conversation ? (
+                    <BotConvIcon />
+                  ) : (
+                    <MessageSquare className="w-4 h-4 flex-shrink-0" />
+                  )}
                   <span className="truncate">{conv.title}</span>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {conv.message_count} {t('hyperAi.messages', 'messages')}
-                </div>
+                {!conv.is_bot_conversation && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {conv.message_count} {t('hyperAi.messages', 'messages')}
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -1090,21 +1121,33 @@ export default function HyperAiPage() {
             )}
           </div>
 
-          {/* Bot Integrations Preview */}
+          {/* Bot Integrations */}
           <div className="pt-4 border-t">
             <h4 className="text-sm font-medium flex items-center gap-1.5 mb-2">
               <Blocks className="w-4 h-4 shrink-0" />
               {t('hyperAi.integrations', 'Integrations')}
             </h4>
             <div className="space-y-2">
-              <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30">
+              {/* Telegram Bot */}
+              <div
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                onClick={() => setShowBotModal(true)}
+              >
                 <MessageCircle className="w-4 h-4 text-[#26A5E4] shrink-0" />
                 <span className="text-xs">{t('hyperAi.telegramBot', 'Telegram Bot')}</span>
-                <span className="ml-auto text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                  {t('common.soon', 'Soon')}
-                </span>
+                {botConfig && botConfig.status === 'connected' ? (
+                  <>
+                    <span className="ml-auto text-[10px] text-muted-foreground">@{botConfig.bot_username}</span>
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  </>
+                ) : (
+                  <span className="ml-auto text-[10px] text-primary">
+                    {t('bot.setup', 'Setup')}
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30">
+              {/* Discord Bot - Coming Soon */}
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 opacity-50">
                 <MessageCircle className="w-4 h-4 text-[#5865F2] shrink-0" />
                 <span className="text-xs">{t('hyperAi.discordBot', 'Discord Bot')}</span>
                 <span className="ml-auto text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
@@ -1129,6 +1172,14 @@ export default function HyperAiPage() {
       <MemoryModal
         open={showMemoryModal}
         onClose={() => setShowMemoryModal(false)}
+      />
+
+      {/* Bot Integration Modal */}
+      <BotIntegrationModal
+        open={showBotModal}
+        onClose={() => setShowBotModal(false)}
+        platform="telegram"
+        onConnected={fetchBotConfig}
       />
     </div>
   )

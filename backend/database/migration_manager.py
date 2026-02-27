@@ -68,6 +68,7 @@ MIGRATIONS = [
     "add_nickname_to_hyper_ai_profile.py",
     "add_enabled_skills_to_hyper_ai_profile.py",
     "add_soft_delete_fields.py",
+    "create_bot_integration_tables.py",
 ]
 
 
