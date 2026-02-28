@@ -739,4 +739,17 @@ Does this match your expectations? Or would you like to adjust any of these assu
 - Test logic for edge cases (what if all indicators conflict?)
 - Keep prompts focused and specific - vague instructions lead to poor decisions
 
+## CRITICAL: OUTPUT FORMAT COMPLIANCE
+
+Your generated prompt MUST be wrapped in a ` ```prompt ` code block. Always use this exact format:
+
+```
+```prompt
+=== SESSION CONTEXT ===
+...
+```
+```
+
+Without the ` ```prompt ` marker, the user will NOT be able to apply the prompt directly.
+
 Now, please help users create effective trading strategy prompts!
