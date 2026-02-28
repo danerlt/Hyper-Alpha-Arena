@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'react-hot-toast'
 import ReactMarkdown from 'react-markdown'
@@ -69,6 +69,28 @@ export default function PromptManager() {
   const [bindingForm, setBindingForm] = useState<BindingFormState>(DEFAULT_BINDING_FORM)
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
 
+  /**
+   * Initial view ID from URL parameter: #prompt-management?view=ID
+   * Parsed once at component mount to handle deep linking from Hyper AI.
+   */
+  const initialViewIdRef = useRef<number | null>((() => {
+    const hash = window.location.hash
+    const hashParamIndex = hash.indexOf('?')
+    if (hashParamIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(hashParamIndex))
+      const viewId = hashParams.get('view')
+      if (viewId) {
+        const numId = Number(viewId)
+        if (!isNaN(numId)) {
+          // Clean up URL after reading
+          window.history.replaceState({}, '', window.location.pathname + hash.slice(0, hashParamIndex))
+          return numId
+        }
+      }
+    }
+    return null
+  })())
+
   // New template dialog
   const [newTemplateDialogOpen, setNewTemplateDialogOpen] = useState(false)
   const [newTemplateName, setNewTemplateName] = useState('')
@@ -113,20 +135,28 @@ export default function PromptManager() {
       setTemplates(data.templates)
       setBindings(data.bindings)
 
-      if (!selectedId && data.templates.length > 0) {
+      // Check for initial view ID from URL (deep link from Hyper AI)
+      const initialViewId = initialViewIdRef.current
+      const effectiveSelectedId = initialViewId ?? selectedId
+
+      if (!effectiveSelectedId && data.templates.length > 0) {
         const first = data.templates[0]
         setSelectedId(first.id)
         setTemplateDraft(first.templateText)
         setNameDraft(first.name)
         setDescriptionDraft(first.description ?? '')
-      } else if (selectedId) {
-        const tpl = data.templates.find((item) => item.id === selectedId)
+      } else if (effectiveSelectedId) {
+        const tpl = data.templates.find((item) => item.id === effectiveSelectedId)
         if (tpl) {
+          setSelectedId(effectiveSelectedId)  // Ensure state is set
           setTemplateDraft(tpl.templateText)
           setNameDraft(tpl.name)
           setDescriptionDraft(tpl.description ?? '')
         }
       }
+
+      // Clear the ref after first use
+      initialViewIdRef.current = null
     } catch (err) {
       console.error(err)
       toast.error(err instanceof Error ? err.message : 'Failed to load prompt templates')

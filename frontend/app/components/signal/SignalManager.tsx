@@ -561,6 +561,29 @@ export default function SignalManager() {
     loadData()
     loadAccounts()
     loadWatchlist()
+
+    /**
+     * URL parameter support: #page-name?view=ID
+     * When navigating from Hyper AI created entity card, switch to pools tab
+     * and highlight/scroll to the specific pool.
+     * Note: Parameters are in the hash (after #), not in search (before #).
+     */
+    const hash = window.location.hash
+    const hashParamIndex = hash.indexOf('?')
+    if (hashParamIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(hashParamIndex))
+      const viewId = hashParams.get('view')
+      if (viewId) {
+        const numId = Number(viewId)
+        if (!isNaN(numId)) {
+          // Switch to pools tab to show the created pool
+          setActiveTab('pools')
+          // TODO: Could scroll to and highlight the specific pool
+        }
+        // Clean up URL after handling (keep hash without params)
+        window.history.replaceState({}, '', window.location.pathname + hash.slice(0, hashParamIndex))
+      }
+    }
   }, [])
 
   // Auto-refresh logs only when on logs tab (silent, no loading)

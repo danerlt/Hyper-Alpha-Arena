@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SettingsDialog } from '@/components/layout/SettingsDialog'
@@ -11,13 +11,51 @@ export default function TraderManagement() {
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
+  /**
+   * Initial view ID from URL parameter: #trader-management?view=ID
+   * Parsed once at component mount to handle deep linking from Hyper AI.
+   */
+  const initialViewIdRef = useRef<number | null>((() => {
+    const hash = window.location.hash
+    const hashParamIndex = hash.indexOf('?')
+    if (hashParamIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(hashParamIndex))
+      const viewId = hashParams.get('view')
+      if (viewId) {
+        const numId = Number(viewId)
+        if (!isNaN(numId)) {
+          // Clean up URL after reading
+          window.history.replaceState({}, '', window.location.pathname + hash.slice(0, hashParamIndex))
+          return numId
+        }
+      }
+    }
+    return null
+  })())
+
   const loadAccounts = async () => {
     try {
       const accountList = await getAccounts()
       setAccounts(accountList)
-      if (accountList.length > 0 && !selectedAccountId) {
+
+      // Check for initial view ID from URL (deep link from Hyper AI)
+      const initialViewId = initialViewIdRef.current
+      const effectiveSelectedId = initialViewId ?? selectedAccountId
+
+      if (accountList.length > 0 && !effectiveSelectedId) {
         setSelectedAccountId(accountList[0].id)
+      } else if (effectiveSelectedId) {
+        // Ensure the URL-specified account exists
+        const target = accountList.find(acc => acc.id === effectiveSelectedId)
+        if (target) {
+          setSelectedAccountId(effectiveSelectedId)
+        } else if (accountList.length > 0) {
+          setSelectedAccountId(accountList[0].id)
+        }
       }
+
+      // Clear the ref after first use
+      initialViewIdRef.current = null
     } catch (error) {
       console.error('Failed to load accounts:', error)
     }

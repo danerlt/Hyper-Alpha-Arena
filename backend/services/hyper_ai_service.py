@@ -833,7 +833,9 @@ def stream_chat_response(
                         tool_calls_log.append({
                             "tool": fn_name,
                             "args": fn_args,
-                            "result": tool_result[:500] if len(tool_result) > 500 else tool_result
+                            # Keep full result for save/create tools (needed for entity cards)
+                            # Truncate others to avoid bloating tool_calls_log
+                            "result": tool_result if fn_name in ('save_prompt', 'save_program', 'save_signal_pool', 'create_ai_trader') else (tool_result[:500] if len(tool_result) > 500 else tool_result)
                         })
                         yield format_sse_event("tool_result", {
                             "name": fn_name,
@@ -877,7 +879,9 @@ def stream_chat_response(
                         tool_calls_log.append({
                             "tool": fn_name,
                             "args": fn_args,
-                            "result": tool_result[:500] if len(tool_result) > 500 else tool_result
+                            # Keep full result for save/create tools (needed for entity cards)
+                            # Truncate others to avoid bloating tool_calls_log
+                            "result": tool_result if fn_name in ('save_prompt', 'save_program', 'save_signal_pool', 'create_ai_trader') else (tool_result[:500] if len(tool_result) > 500 else tool_result)
                         })
                         yield format_sse_event("tool_result", {
                             "name": fn_name,

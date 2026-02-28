@@ -186,12 +186,44 @@ export default function ProgramTrader() {
     fetchAITraders()
     fetchAllBindings()
     loadAccounts()
+
+    /**
+     * URL parameter support: #page-name?view=ID
+     * When navigating from Hyper AI created entity card, auto-select the specific program.
+     * Note: Parameters are in the hash (after #), not in search (before #).
+     */
+    const hash = window.location.hash
+    const hashParamIndex = hash.indexOf('?')
+    if (hashParamIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(hashParamIndex))
+      const viewId = hashParams.get('view')
+      if (viewId) {
+        const numId = Number(viewId)
+        if (!isNaN(numId)) {
+          // Will be handled after programs load
+          setSelectedProgram({ id: numId } as Program)
+        }
+        // Clean up URL after handling (keep hash without params)
+        window.history.replaceState({}, '', window.location.pathname + hash.slice(0, hashParamIndex))
+      }
+    }
   }, [])
 
-  // Auto-select first program when programs load
+  // Auto-select first program when programs load (or URL-specified program)
   useEffect(() => {
-    if (!loading && programs.length > 0 && !selectedProgram && !isCreating) {
-      selectProgram(programs[0])
+    if (!loading && programs.length > 0 && !isCreating) {
+      // If selectedProgram was set from URL param, find and fully load it
+      if (selectedProgram && selectedProgram.id && !selectedProgram.name) {
+        const target = programs.find(p => p.id === selectedProgram.id)
+        if (target) {
+          selectProgram(target)
+          return
+        }
+      }
+      // Otherwise select first if nothing selected
+      if (!selectedProgram) {
+        selectProgram(programs[0])
+      }
     }
   }, [loading, programs])
 

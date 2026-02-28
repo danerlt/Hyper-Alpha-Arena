@@ -108,6 +108,21 @@ function App() {
   const [currentPage, setCurrentPage] = useState<string>('comprehensive')
   const tradingModeRef = useRef(tradingMode)
 
+  /**
+   * Hash Routing: Updates both React state and browser URL hash.
+   * This enables:
+   * - Shareable links (e.g., arena.akooi.com/#prompts)
+   * - Browser back/forward navigation
+   * - Page refresh returns to same page
+   * - Hyper AI can direct users to specific pages via hash
+   *
+   * IMPORTANT: All page navigation should use this function, not setCurrentPage directly.
+   */
+  const handlePageChange = useCallback((page: string) => {
+    setCurrentPage(page)
+    window.location.hash = page
+  }, [])
+
   // Hyper AI states - initialization happens during splash
   const [showSplash, setShowSplash] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -257,8 +272,16 @@ function App() {
       return
     }
 
-    if (hash && PAGE_TITLES[hash]) {
-      setCurrentPage(hash)
+    /**
+     * Hash routing with optional parameters: #page-name or #page-name?view=ID
+     * Extract page name from hash (everything before ? if present)
+     */
+    if (hash) {
+      const hashParamIndex = hash.indexOf('?')
+      const pageName = hashParamIndex !== -1 ? hash.slice(0, hashParamIndex) : hash
+      if (PAGE_TITLES[pageName]) {
+        setCurrentPage(pageName)
+      }
     }
   }, [])
   const [accountRefreshTrigger, setAccountRefreshTrigger] = useState<number>(0)
@@ -497,8 +520,7 @@ function App() {
         list[0]?.api_key === "default-key-please-update-in-settings"
 
       if (hasOnlyDefaultAccount && currentPage === 'comprehensive') {
-        setCurrentPage('trader-management')
-        window.location.hash = 'trader-management'
+        handlePageChange('trader-management')
       }
 
       // Check builder fee authorization for mainnet accounts (once per session)
@@ -718,7 +740,7 @@ function App() {
                 accountRefreshTrigger={accountRefreshTrigger}
                 accounts={accounts}
                 loadingAccounts={accountsLoading}
-                onPageChange={setCurrentPage}
+                onPageChange={handlePageChange}
               />
             </div>
           ) : (
@@ -731,7 +753,7 @@ function App() {
                 <HyperliquidView
                   wsRef={wsRef}
                   refreshKey={hyperliquidRefreshKey}
-                  onPageChange={setCurrentPage}
+                  onPageChange={handlePageChange}
                 />
               </div>
             </>
@@ -779,7 +801,7 @@ function App() {
         )}
 
         {currentPage === 'premium-features' && (
-          <PremiumFeaturesView onAccountUpdated={handleAccountUpdated} onPageChange={setCurrentPage} />
+          <PremiumFeaturesView onAccountUpdated={handleAccountUpdated} onPageChange={handlePageChange} />
         )}
 
         {currentPage === 'model-chat' && (
@@ -800,7 +822,7 @@ function App() {
       <div className="h-screen flex overflow-hidden">
         <Sidebar
           currentPage={currentPage}
-          onPageChange={setCurrentPage}
+          onPageChange={handlePageChange}
           onAccountUpdated={handleAccountUpdated}
         />
         <div className="flex-1 flex flex-col min-w-0">

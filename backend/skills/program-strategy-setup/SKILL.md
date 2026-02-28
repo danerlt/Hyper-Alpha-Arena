@@ -77,9 +77,9 @@ Create the binding: `bind_program_to_trader(trader_id, program_id, signal_pool_i
 
 These are SECURITY OPERATIONS that require manual user action:
 
-1. **Bind Wallet** (if not already bound) → AI Traders page → click trader → bind wallet
+1. **Bind Wallet** (if not already bound) → [AI Trader](/#trader-management) → click trader → bind wallet
    - Wallet must match the confirmed exchange
-2. **Activate Program Binding** → Programs page → "Program Bindings" → click the binding → Edit → activation switch
+2. **Activate Program Binding** → [Programs](/#program-trader) → "Program Bindings" → click the binding → Edit → activation switch
    - Note: Program bindings do NOT use the trader's "Start Trading" toggle
    - The binding itself controls activation
 

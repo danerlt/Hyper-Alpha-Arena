@@ -41,9 +41,9 @@ Based on diagnostic results, address each issue:
 - Signal thresholds too strict → delegate to Signal AI for recalibration
 
 **Manual Operations (guide user to UI):**
-- Wallet not bound → AI Traders page → click trader → bind wallet
-- Trading not started → AI Traders page → click trader → "Start Trading"
-- Program binding not active → Programs page → "Program Bindings" → Edit → activation switch
+- Wallet not bound → [AI Trader](/#trader-management) → click trader → bind wallet
+- Trading not started → [AI Trader](/#trader-management) → click trader → "Start Trading"
+- Program binding not active → [Programs](/#program-trader) → "Program Bindings" → Edit → activation switch
 
 **Data Issues (investigate further):**
 - API errors → check `get_system_logs` for details

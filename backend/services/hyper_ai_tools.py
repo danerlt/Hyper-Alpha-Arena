@@ -1199,8 +1199,10 @@ def execute_save_signal_pool(
             "pool_name": result["pool"]["pool_name"],
             "symbol": symbol.upper(),
             "signals_created": len(result["signals"]),
+            "signals": signals,
             "logic": logic,
             "exchange": exchange,
+            "view_url": f"/#signal-management?view={result['pool']['id']}",
             "note": "Signal pool created. Bind it to an AI Trader to start receiving triggers."
         })
 
@@ -1275,6 +1277,8 @@ def execute_save_prompt(
             "name": name,
             "action": action,
             "variables_detected": variables[:20],
+            "template_text": template_text,
+            "view_url": f"/#prompt-management?view={prompt.id}",
             "note": "Prompt saved. Changes apply to bound AI Traders on next trigger."
         }, indent=2)
 
@@ -1314,6 +1318,8 @@ def execute_save_program(
             "program_id": result.id,
             "name": result.name,
             "action": action,
+            "code": code,
+            "view_url": f"/#program-trader?view={result.id}",
             "validation": {"syntax_valid": True, "security_check": "passed"},
             "note": "Program saved. Use test_run_code to verify logic before binding."
         }, indent=2)
@@ -1387,9 +1393,10 @@ def execute_create_ai_trader(
                 "base_url": base_url,
                 "connection_tested": True
             },
+            "view_url": f"/#trader-management?view={account.id}",
             "next_steps": [
-                "1. Go to Settings → Wallets to bind a wallet",
-                "2. Go to Strategies to create/select a trading strategy",
+                "1. Bind a wallet to this trader",
+                "2. Create/select a trading strategy",
                 "3. Enable auto-trading when ready"
             ],
             "note": "AI Trader created with LLM config. Complete wallet and strategy setup to start trading."

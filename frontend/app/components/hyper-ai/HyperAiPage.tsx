@@ -74,6 +74,18 @@ interface ToolCallLogEntry {
   result: string
 }
 
+/**
+ * Represents a successfully created entity that should be displayed as a card.
+ * Extracted from tool_calls_log when save_xxx tools return success: true.
+ */
+interface CreatedEntityCard {
+  type: 'prompt' | 'program' | 'signal_pool' | 'ai_trader'
+  id: number
+  name: string
+  content?: string  // template_text for prompt, code for program, JSON for signal_pool
+  viewUrl: string
+}
+
 interface Message {
   id?: number
   role: 'user' | 'assistant'
@@ -1310,12 +1322,48 @@ const MessageBubble = memo(function MessageBubble({
 }) {
   const [showReasoning, setShowReasoning] = useState(false)
   const [showToolCalls, setShowToolCalls] = useState(false)
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({})
   const isUser = message.role === 'user'
 
   // Parse tool calls log from stored messages
   const toolCallsLog: ToolCallLogEntry[] = message.tool_calls_log
     ? (() => { try { return JSON.parse(message.tool_calls_log) } catch { return [] } })()
     : []
+
+  /**
+   * Extract created entities from tool call results.
+   * These are displayed as interactive cards above the AI's text response.
+   */
+  const createdEntities: CreatedEntityCard[] = toolCallsLog
+    .filter(entry => {
+      if (!['save_prompt', 'save_program', 'save_signal_pool', 'create_ai_trader'].includes(entry.tool)) return false
+      try {
+        const result = JSON.parse(entry.result)
+        return result.success === true && result.view_url
+      } catch {
+        return false
+      }
+    })
+    .map(entry => {
+      const result = JSON.parse(entry.result)
+      const toolToType: Record<string, CreatedEntityCard['type']> = {
+        save_prompt: 'prompt',
+        save_program: 'program',
+        save_signal_pool: 'signal_pool',
+        create_ai_trader: 'ai_trader'
+      }
+      return {
+        type: toolToType[entry.tool],
+        id: result.prompt_id || result.program_id || result.pool_id || result.trader_id,
+        name: result.name || result.pool_name || result.trader_name,
+        content: result.template_text || result.code || (result.signals ? JSON.stringify(result.signals, null, 2) : undefined),
+        viewUrl: result.view_url
+      } as CreatedEntityCard
+    })
+
+  const toggleCardExpanded = (cardId: string) => {
+    setExpandedCards(prev => ({ ...prev, [cardId]: !prev[cardId] }))
+  }
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -1400,6 +1448,75 @@ const MessageBubble = memo(function MessageBubble({
           </details>
         )}
 
+        {/* Created entity cards - displayed above reasoning and main content */}
+        {!message.isStreaming && createdEntities.length > 0 && (
+          <div className="mb-3 space-y-2">
+            {createdEntities.map((entity, idx) => {
+              const cardId = `${entity.type}-${entity.id}`
+              const isExpanded = expandedCards[cardId]
+              const typeLabels: Record<CreatedEntityCard['type'], { label: string; icon: string; color: string }> = {
+                prompt: { label: t('hyperAi.createdPrompt', 'Prompt Created'), icon: '📝', color: 'border-l-green-500' },
+                program: { label: t('hyperAi.createdProgram', 'Program Created'), icon: '🐍', color: 'border-l-blue-500' },
+                signal_pool: { label: t('hyperAi.createdSignalPool', 'Signal Pool Created'), icon: '📊', color: 'border-l-purple-500' },
+                ai_trader: { label: t('hyperAi.createdAiTrader', 'AI Trader Created'), icon: '🤖', color: 'border-l-amber-500' }
+              }
+              const { label, icon, color } = typeLabels[entity.type]
+
+              return (
+                <div key={cardId} className={`border rounded-lg border-l-4 ${color} bg-background text-foreground`}>
+                  {/* Card header */}
+                  <div className="px-3 py-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span>{icon}</span>
+                      <span className="text-sm font-medium text-green-600 dark:text-green-400">✓ {label}</span>
+                    </div>
+                  </div>
+
+                  {/* Card body */}
+                  <div className="px-3 pb-2">
+                    <div className="text-sm mb-2">
+                      <span className="text-muted-foreground">{t('hyperAi.entityName', 'Name')}:</span>{' '}
+                      <span className="font-medium">{entity.name}</span>
+                      <span className="text-muted-foreground ml-2">(ID: {entity.id})</span>
+                    </div>
+
+                    {/* Expandable content preview */}
+                    {entity.content && (
+                      <div className="mb-2">
+                        <button
+                          onClick={() => toggleCardExpanded(cardId)}
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          {isExpanded ? (
+                            <><ChevronDown className="w-3 h-3" />{t('hyperAi.hideContent', 'Hide content')}</>
+                          ) : (
+                            <><ChevronRight className="w-3 h-3" />{t('hyperAi.viewContent', 'View content')}</>
+                          )}
+                        </button>
+                        {isExpanded && (
+                          <div className="mt-2 max-h-64 overflow-y-auto rounded border bg-muted/30 p-2">
+                            <pre className="text-xs whitespace-pre-wrap font-mono">{entity.content}</pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* View in page link */}
+                    <a
+                      href={entity.viewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      {t('hyperAi.viewInPage', 'View in page')} →
+                    </a>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {/* Reasoning snapshot for completed messages - moved above content */}
         {!message.isStreaming && message.reasoning_snapshot && (
           <details className="mb-3 text-xs border rounded-md">
@@ -1417,7 +1534,30 @@ const MessageBubble = memo(function MessageBubble({
           isUser ? 'prose-invert' : 'dark:prose-invert'
         }`}>
           {message.content ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                /**
+                 * Custom link renderer for Hyper AI chat:
+                 * - Internal hash links (e.g., /#trader-management) open in new tab
+                 *   so the chat conversation is not interrupted
+                 * - External links also open in new tab with security attributes
+                 */
+                a: ({ href, children }) => {
+                  const isInternal = href?.startsWith('/') || href?.startsWith('#')
+                  return (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel={isInternal ? undefined : 'noopener noreferrer'}
+                      className="text-primary hover:underline"
+                    >
+                      {children}
+                    </a>
+                  )
+                }
+              }}
+            >
               {message.content}
             </ReactMarkdown>
           ) : message.isStreaming ? (
