@@ -192,7 +192,9 @@ class HistoricalDataProvider:
         if virtual_kline:
             # Check if we need to replace or append
             if filtered and filtered[-1]["timestamp"] == virtual_kline["timestamp"]:
-                # Same period start - replace with virtual (more up-to-date)
+                # Same period start - replace with virtual (more up-to-date price)
+                # Preserve real volume since virtual kline has no volume data
+                virtual_kline["volume"] = filtered[-1]["volume"]
                 filtered[-1] = virtual_kline
             else:
                 # New period - append virtual kline
