@@ -346,15 +346,9 @@ export default function HyperliquidMultiAccountSummary({
     return 'text-green-600'
   }
 
-  // Dynamic grid columns based on number of accounts
+  // Use horizontal scroll layout when 4+ accounts to prevent card cramping
   const accountCount = accountBalances.length
-  const gridColsClass = accountCount === 1
-    ? 'grid-cols-1'
-    : accountCount === 2
-    ? 'grid-cols-1 md:grid-cols-2'
-    : accountCount === 3
-    ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-    : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'
+  const useScrollLayout = accountCount >= 4
 
   return (
     <div className="space-y-4">
@@ -380,8 +374,11 @@ export default function HyperliquidMultiAccountSummary({
         <div className="text-sm text-muted-foreground">{t('account.loadingData', 'Loading account data...')}</div>
       )}
 
-      {/* Account cards grid */}
-      <div className={`grid ${gridColsClass} gap-4`}>
+      {/* Account cards - scroll horizontally when 4+ accounts */}
+      <div className={useScrollLayout
+        ? 'flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory'
+        : `grid gap-4 ${accountCount === 1 ? 'grid-cols-1' : accountCount === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`
+      }>
         {accountBalances.map((account) => {
           const logo = getModelLogo(account.accountName)
           const marginStatus = account.balance
@@ -394,7 +391,7 @@ export default function HyperliquidMultiAccountSummary({
           return (
             <Card
               key={`${account.accountId}_${account.exchange}`}
-              className="p-4 space-y-3 hover:shadow-md transition-shadow"
+              className={`p-4 space-y-3 hover:shadow-md transition-shadow ${useScrollLayout ? 'min-w-[400px] flex-shrink-0 snap-start' : ''}`}
             >
               {/* Account header with logo and View Details button */}
               <div className="flex items-center justify-between pb-2 border-b border-border">
