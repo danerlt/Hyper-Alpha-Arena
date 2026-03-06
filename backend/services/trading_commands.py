@@ -404,12 +404,12 @@ def place_ai_driven_hyperliquid_order(
     # Determine configured Hyperliquid symbols
     selected_symbols = get_hyperliquid_selected_symbols()
     if not selected_symbols:
-        logger.warning("No Hyperliquid watchlist configured, skipping Hyperliquid trading")
+        logger.info("No Hyperliquid watchlist configured, skipping Hyperliquid trading")
         return
 
     prices = _get_market_prices(selected_symbols)
     if not prices:
-        logger.warning("Failed to fetch market prices, skipping Hyperliquid trading")
+        logger.info("Failed to fetch market prices, skipping Hyperliquid trading")
         return
 
     # Sampling data availability (informational)
@@ -423,7 +423,7 @@ def place_ai_driven_hyperliquid_order(
     if available_symbols:
         logger.info(f"Available sampling symbols for Hyperliquid: {', '.join(available_symbols)}")
     else:
-        logger.warning("No sampling data available for configured Hyperliquid symbols")
+        logger.info("No sampling data available for configured Hyperliquid symbols")
 
     symbol_metadata_map = get_hyperliquid_symbol_map()
     prompt_symbol_metadata = {}
@@ -457,8 +457,8 @@ def place_ai_driven_hyperliquid_order(
 
             # If there are validation errors, skip this account with clear warning
             if validation_errors:
-                logger.warning(
-                    f"⚠️  AI Trader '{account.name}' (ID: {account.id}) skipped - "
+                logger.info(
+                    f"AI Trader '{account.name}' (ID: {account.id}) skipped - "
                     f"Configuration incomplete: {', '.join(validation_errors)}. "
                     f"Please complete configuration in AI Traders management page."
                 )
@@ -473,9 +473,8 @@ def place_ai_driven_hyperliquid_order(
             try:
                 client = get_hyperliquid_client(db, account.id, override_environment=environment)
             except ValueError as wallet_err:
-                # Wallet not configured - log clear warning
-                logger.warning(
-                    f"⚠️  AI Trader '{account.name}' (ID: {account.id}) skipped - "
+                logger.info(
+                    f"AI Trader '{account.name}' (ID: {account.id}) skipped - "
                     f"Hyperliquid wallet not configured. {str(wallet_err)} "
                     f"Please configure wallet in AI Traders management page."
                 )
@@ -1314,7 +1313,7 @@ def place_ai_driven_binance_order(
             from services.hyperliquid_environment import get_global_trading_mode
             environment = get_global_trading_mode(db)
             if not environment:
-                logger.warning(f"AI Trader '{account.name}' skipped - No trading environment configured")
+                logger.info(f"AI Trader '{account.name}' skipped - No trading environment configured")
                 continue
 
             # Check Binance wallet configuration for the current environment
@@ -1325,7 +1324,7 @@ def place_ai_driven_binance_order(
             ).first()
 
             if not wallet or not wallet.api_key_encrypted or not wallet.secret_key_encrypted:
-                logger.warning(
+                logger.info(
                     f"AI Trader '{account.name}' (ID: {account.id}) skipped - "
                     f"Binance wallet not configured."
                 )

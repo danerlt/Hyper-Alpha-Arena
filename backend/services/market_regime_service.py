@@ -36,7 +36,8 @@ def fetch_ohlc_from_flow(
     symbol: str,
     period: str,
     limit: int = 15,
-    current_time_ms: Optional[int] = None
+    current_time_ms: Optional[int] = None,
+    exchange: str = "hyperliquid"
 ) -> List[Dict[str, Any]]:
     """
     Aggregate OHLC data from 15-second flow data (MarketTradesAggregated).
@@ -50,6 +51,7 @@ def fetch_ohlc_from_flow(
         period: Timeframe ("1m", "5m", "15m", "1h")
         limit: Number of K-lines to generate (default 15 for ATR14/RSI14)
         current_time_ms: Anchor timestamp in milliseconds (defaults to now)
+        exchange: Exchange name (e.g., "hyperliquid", "binance")
 
     Returns:
         List of OHLC dicts in chronological order (oldest first),
@@ -78,6 +80,7 @@ def fetch_ohlc_from_flow(
         MarketTradesAggregated.taker_sell_notional
     ).filter(
         MarketTradesAggregated.symbol == symbol.upper(),
+        MarketTradesAggregated.exchange == exchange.lower(),
         MarketTradesAggregated.timestamp >= start_ts,
         MarketTradesAggregated.timestamp < end_ts
     ).order_by(MarketTradesAggregated.timestamp).all()
@@ -462,7 +465,8 @@ def classify_regime(
 
 def fetch_kline_data(
     db: Session, symbol: str, period: str = "5m", limit: int = 50,
-    current_time_ms: Optional[int] = None, use_realtime: bool = False
+    current_time_ms: Optional[int] = None, use_realtime: bool = False,
+    exchange: str = "hyperliquid"
 ) -> List[Dict[str, Any]]:
     """
     Fetch K-line data for technical indicator calculation.
@@ -475,16 +479,18 @@ def fetch_kline_data(
         limit: Number of candles to fetch
         current_time_ms: Optional timestamp for historical queries (backtesting)
         use_realtime: If True, use flow data aggregation for real-time regime calculation
+        exchange: Exchange name (e.g., "hyperliquid", "binance")
     """
     # If use_realtime, aggregate OHLC from flow data (15-second buckets)
     # This provides real-time regime calculation without K-line close delay
     if use_realtime:
-        return fetch_ohlc_from_flow(db, symbol, period, limit, current_time_ms)
+        return fetch_ohlc_from_flow(db, symbol, period, limit, current_time_ms, exchange=exchange)
 
     # Original DB-only logic for backtesting
     query = db.query(CryptoKline).filter(
         CryptoKline.symbol == symbol,
-        CryptoKline.period == period
+        CryptoKline.period == period,
+        CryptoKline.exchange == exchange.lower()
     )
 
     if current_time_ms:
@@ -650,7 +656,8 @@ def get_market_regime(
     # Fetch K-line data and calculate price metrics (ATR, RSI)
     kline_data = fetch_kline_data(
         db, symbol, timeframe, limit=50,
-        current_time_ms=timestamp_ms, use_realtime=use_realtime
+        current_time_ms=timestamp_ms, use_realtime=use_realtime,
+        exchange=exchange
     )
     price_metrics = calculate_price_metrics(kline_data)
     price_atr = price_metrics["price_atr"]

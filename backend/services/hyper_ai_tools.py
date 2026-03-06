@@ -404,11 +404,12 @@ HYPER_AI_TOOLS = [
         "type": "function",
         "function": {
             "name": "update_trader_strategy",
-            "description": "Update trigger configuration for a Prompt-based AI Trader (signal pools, scheduled trigger, interval).",
+            "description": "Update trigger configuration for a Prompt-based AI Trader (signal pools, scheduled trigger, interval, exchange).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "trader_id": {"type": "integer", "description": "AI Trader ID"},
+                    "exchange": {"type": "string", "enum": ["hyperliquid", "binance"], "description": "Target exchange. MUST match the trader's wallet exchange."},
                     "signal_pool_ids": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -1625,6 +1626,7 @@ def execute_list_traders(db: Session, trader_id: int = None) -> str:
                     "binding_id": pgb.id,
                     "program_id": pgb.program_id,
                     "program_name": prog.name if prog else "Unknown",
+                    "exchange": pgb.exchange or "hyperliquid",
                     "signal_pool_ids": pool_ids,
                     "trigger_interval": pgb.trigger_interval,
                     "is_active": pgb.is_active
@@ -1989,7 +1991,8 @@ def execute_update_trader_strategy(
     db: Session, trader_id: int,
     signal_pool_ids: list = None,
     scheduled_trigger_enabled: bool = None,
-    trigger_interval: int = None
+    trigger_interval: int = None,
+    exchange: str = "hyperliquid"
 ) -> str:
     """Update trigger config for a Prompt-based AI Trader. Reuses upsert_strategy."""
     from database.models import Account
@@ -2000,21 +2003,20 @@ def execute_update_trader_strategy(
         if not account:
             return json.dumps({"error": f"AI Trader {trader_id} not found"})
 
-        # Note: For Prompt Trader, exchange is determined by wallet, not by strategy config.
-        # Signal pool exchange validation is done at Program Binding level.
-
         strategy = upsert_strategy(
             db,
             account_id=trader_id,
             signal_pool_ids=signal_pool_ids,
             scheduled_trigger_enabled=scheduled_trigger_enabled,
-            trigger_interval=trigger_interval
+            trigger_interval=trigger_interval,
+            exchange=exchange
         )
 
         return json.dumps({
             "success": True,
             "trader_id": trader_id,
             "trader_name": account.name,
+            "exchange": exchange,
             "signal_pool_ids": signal_pool_ids,
             "scheduled_trigger_enabled": scheduled_trigger_enabled,
             "trigger_interval": trigger_interval
@@ -2433,7 +2435,8 @@ def execute_hyper_ai_tool(
                 trader_id=arguments.get("trader_id"),
                 signal_pool_ids=arguments.get("signal_pool_ids"),
                 scheduled_trigger_enabled=arguments.get("scheduled_trigger_enabled"),
-                trigger_interval=arguments.get("trigger_interval")
+                trigger_interval=arguments.get("trigger_interval"),
+                exchange=arguments.get("exchange", "hyperliquid")
             )
 
         # --- Update tools ---

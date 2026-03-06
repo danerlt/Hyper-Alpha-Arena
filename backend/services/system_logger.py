@@ -330,4 +330,7 @@ def setup_system_logger():
     root_logger = logging.getLogger()
     root_logger.addHandler(handler)
 
+    # Suppress noisy APScheduler warnings (e.g. "was missed by 0:00:15")
+    logging.getLogger("apscheduler").setLevel(logging.ERROR)
+
     logging.info("System log collector initialized")

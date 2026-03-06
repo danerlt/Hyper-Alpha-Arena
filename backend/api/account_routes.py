@@ -286,12 +286,20 @@ async def get_account_strategy(account_id: int, db: Session = Depends(get_db)):
 
     strategy = get_strategy_by_account(db, account_id)
     if not strategy:
+        # Check if account has a Binance wallet to determine default exchange
+        from database.models import BinanceWallet
+        has_binance = db.query(BinanceWallet).filter(
+            BinanceWallet.account_id == account_id,
+            BinanceWallet.is_active == "true"
+        ).first()
+        default_exchange = "binance" if has_binance else "hyperliquid"
         strategy = upsert_strategy(
             db,
             account_id=account_id,
             price_threshold=1.0,
             trigger_interval=150,
             enabled=(account.auto_trading_enabled == "true"),
+            exchange=default_exchange,
         )
         # Reload strategies after creation
         hyper_strategy_manager._load_strategies()

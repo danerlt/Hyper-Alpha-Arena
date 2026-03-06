@@ -93,6 +93,7 @@ class DataProvider:
 
         Uses the same data source as AI Trader's {BTC_klines_15m} variable.
         Always fetches fresh data from exchange API, not from database.
+        After fetching, backfills to database in background for backtest reuse.
         """
         from services.market_data import get_kline_data
 
@@ -114,7 +115,7 @@ class DataProvider:
                 period=period,
                 count=fetch_count,
                 environment=self.environment,
-                persist=False  # Don't write to DB, real-time only
+                persist=False  # Don't block on DB write
             )
             if raw_data:
                 # Convert to Kline objects, take last 'count' candles
@@ -133,12 +134,71 @@ class DataProvider:
                 # Cache the full fetch for indicator calculation reuse
                 self._kline_cache[f"{symbol}_{period}_raw"] = raw_data
                 self._kline_cache[cache_key] = klines
+                # Backfill to database in background (non-blocking)
+                self._backfill_klines_async(symbol, period, raw_data)
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"get_klines failed for {symbol} {period}: {e}")
         self._log_query("get_klines", {"symbol": symbol, "period": period, "count": count},
                        {"count": len(klines)})
         return klines
+
+    def _backfill_klines_async(self, symbol: str, period: str, raw_data: list):
+        """Backfill kline data to database in a background thread (non-blocking)."""
+        import threading
+        import logging
+
+        exchange = self.exchange
+        environment = self.environment
+
+        def _do_backfill():
+            if environment != "mainnet":
+                return
+            try:
+                from database.connection import SessionLocal
+                from database.models import CryptoKline
+                from datetime import datetime, timezone
+
+                db = SessionLocal()
+                try:
+                    inserted = 0
+                    for k in raw_data:
+                        ts = int(k.get('timestamp', 0))
+                        ts_sec = ts if ts < 1e12 else ts // 1000
+                        existing = db.query(CryptoKline).filter(
+                            CryptoKline.symbol == symbol,
+                            CryptoKline.period == period,
+                            CryptoKline.exchange == exchange,
+                            CryptoKline.timestamp == ts_sec,
+                        ).first()
+                        if not existing:
+                            dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
+                            record = CryptoKline(
+                                exchange=exchange, symbol=symbol,
+                                market="CRYPTO", period=period,
+                                timestamp=ts_sec,
+                                datetime_str=dt.strftime("%Y-%m-%d %H:%M:%S"),
+                                environment="mainnet",
+                                open_price=float(k.get('open', 0) or 0),
+                                high_price=float(k.get('high', 0) or 0),
+                                low_price=float(k.get('low', 0) or 0),
+                                close_price=float(k.get('close', 0) or 0),
+                                volume=float(k.get('volume', 0) or 0),
+                            )
+                            db.add(record)
+                            inserted += 1
+                    if inserted > 0:
+                        db.commit()
+                        logging.getLogger(__name__).debug(
+                            f"Backfilled {inserted} {exchange} klines for {symbol}/{period}"
+                        )
+                finally:
+                    db.close()
+            except Exception as e:
+                logging.getLogger(__name__).debug(f"Kline backfill failed: {e}")
+
+        thread = threading.Thread(target=_do_backfill, daemon=True)
+        thread.start()
 
     def get_indicator(self, symbol: str, indicator: str, period: str) -> Dict[str, Any]:
         """Get technical indicator values based on real-time K-line data.
