@@ -49,9 +49,13 @@ async def rebuild_frontend():
     except Exception as e:
         return {"status": "error", "message": f"Frontend rebuild failed: {str(e)}"}
 
+# CORS: allow same-origin and user-configured origins
+_cors_env = os.getenv("CORS_ALLOWED_ORIGINS", "")
+_cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins, or specify specific domains
+    allow_origins=_cors_origins if _cors_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
