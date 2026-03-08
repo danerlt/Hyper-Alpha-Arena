@@ -141,7 +141,7 @@ docker compose up -d --build        # 新版 Docker Desktop（推荐）
 docker-compose up -d --build       # 旧版 Docker 或独立安装的 docker-compose
 ```
 
-启动完成后访问 **http://localhost:8802**
+启动完成后访问 **http://localhost:8802** 或 **http://127.0.0.1:8802**
 
 ### 常用命令
 
@@ -196,6 +196,9 @@ Hyper Alpha Arena 支持所有兼容 OpenAI API 的大语言模型。**推荐使
 docker-compose down
 docker-compose up -d --build
 ```
+
+**问题**：Windows 上访问 `localhost:8802` 页面无法加载 / WebSocket 报错
+**解决**：改用 `http://127.0.0.1:8802`。Windows 可能将 `localhost` 解析为 IPv6（`::1`），而 Docker 默认不绑定 IPv6。
 
 **问题**：无法连接 Docker 守护进程
 **解决**：确保 Docker Desktop 正在运行

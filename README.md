@@ -141,7 +141,7 @@ docker compose up -d --build        # For newer Docker Desktop (recommended)
 docker-compose up -d --build       # For older Docker versions or standalone docker-compose
 ```
 
-The application will be available at **http://localhost:8802**
+The application will be available at **http://localhost:8802** or **http://127.0.0.1:8802**
 
 ### Managing the Application
 
@@ -198,6 +198,9 @@ The platform automatically handles model-specific configurations and parameter d
 docker-compose down
 docker-compose up -d --build
 ```
+
+**Problem**: Page won't load / WebSocket error when using `localhost:8802` on Windows
+**Solution**: Use `http://127.0.0.1:8802` instead. Windows may resolve `localhost` to IPv6 (`::1`), which Docker doesn't bind to by default.
 
 **Problem**: Cannot connect to Docker daemon
 **Solution**: Make sure Docker Desktop is running
