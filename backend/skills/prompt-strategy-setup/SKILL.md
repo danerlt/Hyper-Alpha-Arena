@@ -82,7 +82,9 @@ Configure triggers: `update_trader_strategy(trader_id, signal_pool_ids, ...)`
 These are SECURITY OPERATIONS that require manual user action:
 
 1. **Bind Wallet** → [AI Trader](/#trader-management) → click the trader → bind wallet section
-   - Wallet must match the confirmed exchange
+   - Hyperliquid: create API Wallet on Hyperliquid website, paste agent private key + master wallet address
+   - Binance: paste API key + secret key
+   - Wallet exchange must match the confirmed exchange
 2. **Start Trading** → [AI Trader](/#trader-management) → click the trader → "Start Trading" toggle
 
 Offer to verify after user completes: `diagnose_trader_issues(trader_id)`

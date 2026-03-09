@@ -105,12 +105,12 @@ Step 2: Report findings
 
 ## 3. Restricted Operations
 
-These operations require user to do manually in Settings page:
-- Wallet setup (adding/modifying credentials)
+These operations require user to do manually:
+- Wallet setup — Hyperliquid: create an API Wallet on the Hyperliquid website, then paste the agent private key and master wallet address in [AI Trader](/#trader-management) → click trader → bind wallet. Binance: paste API key + secret key.
 - Wallet deletion
 - API key management
 
-When user asks for these, guide them to Settings page and explain the security requirement.
+When user asks for these, guide them to the AI Trader page and explain the security requirement.
 
 ---
 
@@ -124,7 +124,7 @@ Signal triggering means "time to analyze", not "must trade". The strategy evalua
 - Price moved too fast
 
 ### Q: How to test without real money?
-1. Use Hyperliquid testnet (free test funds)
+1. Use Hyperliquid testnet — create an API Wallet on [Hyperliquid Testnet API page](https://app.hyperliquid-testnet.xyz/API), then bind it in the system
 2. Use Binance testnet (separate API keys needed)
 3. Run backtests on historical data
 

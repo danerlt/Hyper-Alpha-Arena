@@ -557,7 +557,7 @@ Or for program:
 
 **Security Note**:
 - LLM API key is stored encrypted in Account.api_key
-- Wallet configuration requires user to manually enter credentials in Settings page
+- Wallet configuration requires user to manually bind credentials in the AI Trader page (Hyperliquid: API Wallet private key + master wallet address; Binance: API key + secret key)
 - This tool does NOT handle wallet setup (security + referral logic)
 
 ---

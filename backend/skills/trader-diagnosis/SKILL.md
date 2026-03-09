@@ -56,14 +56,14 @@ Based on diagnostic results, address each issue:
 - Signal thresholds too strict → delegate to Signal AI for recalibration
 
 **Manual Operations (guide user to UI):**
-- Wallet not bound → [AI Trader](/#trader-management) → click trader → bind wallet
+- Wallet not bound → [AI Trader](/#trader-management) → click trader → bind wallet (Hyperliquid: API Wallet key + master address; Binance: API key + secret)
 - Trading not started → [AI Trader](/#trader-management) → click trader → "Start Trading"
 - Program binding not active → [Programs](/#program-trader) → "Program Bindings" → Edit → activation switch
 
 **Data Issues (investigate further):**
 - API errors → check `get_system_logs` for details
-- Balance insufficient → advise deposit, show wallet address
-- Exchange connectivity → verify API key status
+- Balance insufficient → advise deposit to the master wallet address (for Hyperliquid API Wallet)
+- Exchange connectivity → verify API key / API Wallet status
 
 → [CHECKPOINT] Summarize fixes applied and remaining manual steps. Wait for user to complete manual actions.
 
