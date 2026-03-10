@@ -145,6 +145,42 @@ class FactorEffectivenessService:
                 self._upsert(db, exchange, fdef["name"], fdef["category"],
                              symbol, period, fp_label, today, n_bars, metrics)
                 count += 1
+
+        # Custom factors via expression engine
+        count += self._compute_custom_effectiveness(
+            db, exchange, symbol, period, klines, closes, n_bars, today,
+        )
+        return count
+
+    def _compute_custom_effectiveness(self, db, exchange, symbol, period, klines, closes, n_bars, today):
+        """Compute IC/ICIR/win_rate for active custom factors."""
+        import pandas as pd
+        from database.models import CustomFactor
+        from services.factor_expression_engine import factor_expression_engine
+
+        try:
+            custom_factors = db.query(CustomFactor).filter(CustomFactor.is_active == True).all()
+        except Exception:
+            return 0
+
+        count = 0
+        for cf in custom_factors:
+            try:
+                series, err = factor_expression_engine.execute(cf.expression, klines)
+                if series is None or len(series) != n_bars:
+                    continue
+                fvals = [None if pd.isna(v) else float(v) for v in series.tolist()]
+                for fp_label, fp_hours in FORWARD_PERIODS.items():
+                    offset = fp_hours
+                    aligned_fv, aligned_rt = self._align_series(fvals, closes, offset, n_bars)
+                    if len(aligned_fv) < 10:
+                        continue
+                    metrics = self._calc_metrics(aligned_fv, aligned_rt)
+                    self._upsert(db, exchange, cf.name, "custom",
+                                 symbol, period, fp_label, today, n_bars, metrics)
+                    count += 1
+            except Exception as e:
+                logger.warning(f"[FactorEffectiveness] custom '{cf.name}' err: {e}")
         return count
 
     def _slice_indicators(self, indicators, idx):

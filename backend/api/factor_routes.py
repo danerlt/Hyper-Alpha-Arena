@@ -15,13 +15,17 @@ import threading
 from datetime import date, timedelta
 from typing import Optional
 
+import pandas as pd
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from database.connection import SessionLocal
+from database.models import CustomFactor
 from services.factor_registry import FACTOR_REGISTRY, FACTOR_CATEGORIES, CATEGORY_LABELS
+from services.factor_expression_engine import factor_expression_engine
 
 # Track background compute task
 _compute_lock = threading.Lock()
@@ -40,12 +44,29 @@ def get_db():
 
 
 @router.get("/library")
-async def get_factor_library():
-    """Return the full factor registry (no DB query needed)."""
+async def get_factor_library(db: Session = Depends(get_db)):
+    """Return full factor registry: built-in + custom factors."""
+    # Built-in factors with source tag
+    builtin = [{**f, "source": "builtin"} for f in FACTOR_REGISTRY]
+
+    # Custom factors from DB
+    custom_rows = db.query(CustomFactor).filter(CustomFactor.is_active == True).all()
+    custom = [
+        {
+            "name": cf.name, "category": "custom",
+            "display_name": cf.name, "display_name_zh": cf.name,
+            "description": cf.expression, "description_zh": cf.expression,
+            "source": cf.source or "custom",
+            "expression": cf.expression,
+            "custom_id": cf.id,
+        }
+        for cf in custom_rows
+    ]
+
     return {
-        "factors": FACTOR_REGISTRY,
+        "factors": builtin + custom,
         "categories": FACTOR_CATEGORIES,
-        "category_labels": CATEGORY_LABELS,
+        "category_labels": {**CATEGORY_LABELS, "custom": {"en": "Custom", "zh": "自定义"}},
     }
 
 
@@ -285,3 +306,126 @@ async def compute_progress():
             "total": val_prog.get("total", 0),
         }
     return {"status": "running", "phase": "starting"}
+
+
+# ── Custom Factor CRUD ──
+
+
+class CustomFactorRequest(BaseModel):
+    name: str
+    expression: str
+    description: str = ""
+    category: str = "custom"
+    source: str = "manual"
+
+
+@router.get("/custom")
+async def list_custom_factors(db: Session = Depends(get_db)):
+    """List all custom factors."""
+    rows = db.query(CustomFactor).order_by(CustomFactor.created_at.desc()).all()
+    return {
+        "items": [
+            {
+                "id": r.id, "name": r.name, "expression": r.expression,
+                "description": r.description, "category": r.category,
+                "source": r.source, "is_active": r.is_active,
+                "created_at": str(r.created_at) if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.post("/custom")
+async def create_custom_factor(req: CustomFactorRequest, db: Session = Depends(get_db)):
+    """Save a custom factor expression."""
+    # Validate expression syntax
+    ok, err = factor_expression_engine.validate(req.expression)
+    if not ok:
+        return {"status": "error", "error": err}
+
+    # Check duplicate name
+    existing = db.query(CustomFactor).filter(CustomFactor.name == req.name).first()
+    if existing:
+        return {"status": "error", "error": f"Factor name '{req.name}' already exists"}
+
+    factor = CustomFactor(
+        name=req.name,
+        expression=req.expression,
+        description=req.description,
+        category=req.category,
+        source=req.source,
+    )
+    db.add(factor)
+    db.commit()
+    db.refresh(factor)
+    return {"status": "ok", "id": factor.id, "name": factor.name}
+
+
+@router.delete("/custom/{factor_id}")
+async def delete_custom_factor(factor_id: int, db: Session = Depends(get_db)):
+    """Delete a custom factor."""
+    factor = db.query(CustomFactor).filter(CustomFactor.id == factor_id).first()
+    if not factor:
+        return {"status": "error", "error": "Factor not found"}
+    db.delete(factor)
+    db.commit()
+    return {"status": "ok"}
+
+
+# ── Expression Evaluation ──
+
+
+class EvaluateRequest(BaseModel):
+    expression: str
+    symbol: str
+    exchange: str = "hyperliquid"
+    period: str = "1h"
+
+
+@router.post("/evaluate")
+async def evaluate_expression(req: EvaluateRequest):
+    """Evaluate a factor expression on-demand (no save required)."""
+    from services.market_data import get_kline_data
+
+    market = "binance" if req.exchange == "binance" else "CRYPTO"
+    klines = get_kline_data(req.symbol, market=market, period=req.period, count=500)
+    if not klines or len(klines) < 50:
+        return {"status": "error", "error": f"Insufficient K-line data for {req.symbol}"}
+
+    results, err = factor_expression_engine.evaluate_ic(req.expression, klines)
+    if results is None:
+        return {"status": "error", "error": err}
+
+    # Also get latest value
+    series, _ = factor_expression_engine.execute(req.expression, klines)
+    latest_value = None
+    if series is not None and len(series) > 0:
+        last = series.iloc[-1]
+        latest_value = float(last) if not pd.isna(last) else None
+
+    return {
+        "status": "ok",
+        "expression": req.expression,
+        "symbol": req.symbol,
+        "exchange": req.exchange,
+        "latest_value": latest_value,
+        "effectiveness": results,
+    }
+
+
+class ValidateExpressionRequest(BaseModel):
+    expression: str
+
+
+@router.post("/validate-expression")
+async def validate_expression(req: ValidateExpressionRequest):
+    """Quick syntax check for an expression."""
+    ok, err = factor_expression_engine.validate(req.expression)
+    return {"valid": ok, "error": err if not ok else None}
+
+
+@router.get("/expression-functions")
+async def list_expression_functions():
+    """Return available functions for expression building."""
+    return {"functions": factor_expression_engine.FUNCTION_DOCS}

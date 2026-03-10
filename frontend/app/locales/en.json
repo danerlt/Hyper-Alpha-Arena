@@ -1666,6 +1666,27 @@
     "resultEffectiveness": "Effectiveness Records",
     "icTooltip": "Information Coefficient: correlation between factor and future returns. Higher |IC| = stronger prediction. Positive = same direction, negative = inverse.",
     "icirTooltip": "IC Information Ratio: IC stability over time. Higher |ICIR| = more consistent prediction, not just a fluke.",
-    "winRateTooltip": "Percentage of times factor direction matched future price direction. Above 55% is considered strong."
+    "winRateTooltip": "Percentage of times factor direction matched future price direction. Above 55% is considered strong.",
+    "customLab": "Custom Factor Lab",
+    "customLabDesc": "Enter a factor expression to evaluate its predictive power against historical data.",
+    "expressionPlaceholder": "e.g. EMA(close, 7) / EMA(close, 21) - 1",
+    "evaluate": "Evaluate",
+    "evaluating": "Evaluating...",
+    "availableFunctions": "Available Functions",
+    "latestValue": "Latest Value",
+    "saveToLibrary": "Save to Library",
+    "factorName": "Factor Name",
+    "factorNamePlaceholder": "e.g. EMA Ratio 7/21",
+    "description": "Description",
+    "descriptionPlaceholder": "Optional description",
+    "saving": "Saving...",
+    "saved": "Factor saved successfully",
+    "customTag": "Custom",
+    "expression": "Expression",
+    "source": "Source",
+    "deleteConfirm": "Delete this custom factor?",
+    "noCustomFactors": "No custom factors yet. Use the lab above to create one.",
+    "syntaxError": "Syntax Error",
+    "evalError": "Evaluation Error"
   }
 }

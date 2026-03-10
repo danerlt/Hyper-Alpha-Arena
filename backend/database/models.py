@@ -1692,3 +1692,21 @@ class FactorEffectiveness(Base):
         UniqueConstraint('exchange', 'factor_name', 'symbol', 'period', 'forward_period', 'calc_date',
                          name='factor_effectiveness_unique_key'),
     )
+
+
+class CustomFactor(Base):
+    """User/AI-defined custom factor expressions"""
+    __tablename__ = "custom_factors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    expression = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(30), nullable=False, default="custom")
+    source = Column(String(20), nullable=False, default="manual")  # manual / ai / builtin
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+
+    __table_args__ = (
+        UniqueConstraint('name', name='custom_factors_name_unique'),
+    )

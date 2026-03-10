@@ -161,11 +161,15 @@ class FactorComputationService:
                 "value": float(value),
             })
 
+        # Compute custom factors via expression engine
+        custom_rows = self._compute_custom_factors(db, klines, now_ts, symbol, period, exchange)
+        rows_to_upsert.extend(custom_rows)
+
         if not rows_to_upsert:
             return
 
         self._bulk_upsert(db, rows_to_upsert)
-        print(f"[FactorEngine] {symbol}/{period}: wrote {len(rows_to_upsert)} factors", flush=True)
+        print(f"[FactorEngine] {symbol}/{period}: wrote {len(rows_to_upsert)} factors ({len(custom_rows)} custom)", flush=True)
 
     def _extract_value(self, factor_def, indicators, klines, db, symbol, period, exchange):
         """Extract a single factor value from computed indicators or microstructure."""
@@ -251,6 +255,39 @@ class FactorComputationService:
             if avg != 0:
                 return float(klines[-1]["volume"]) / avg
         return None
+
+    def _compute_custom_factors(self, db: Session, klines, now_ts, symbol, period, exchange):
+        """Compute active custom factors using expression engine."""
+        from database.models import CustomFactor
+        from services.factor_expression_engine import factor_expression_engine
+
+        rows = []
+        try:
+            custom_factors = db.query(CustomFactor).filter(CustomFactor.is_active == True).all()
+        except Exception:
+            return rows
+
+        for cf in custom_factors:
+            try:
+                series, err = factor_expression_engine.execute(cf.expression, klines)
+                if series is None or len(series) == 0:
+                    continue
+                import pandas as pd
+                last_val = series.iloc[-1]
+                if pd.isna(last_val):
+                    continue
+                rows.append({
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "period": period,
+                    "factor_name": cf.name,
+                    "factor_category": "custom",
+                    "timestamp": now_ts,
+                    "value": float(last_val),
+                })
+            except Exception as e:
+                logger.warning(f"[FactorEngine] custom factor '{cf.name}' err: {e}")
+        return rows
 
     def _bulk_upsert(self, db: Session, rows: list):
         """Upsert factor values using ON CONFLICT DO UPDATE."""

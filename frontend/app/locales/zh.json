@@ -1686,6 +1686,27 @@
     "resultEffectiveness": "有效性记录数",
     "icTooltip": "信息系数：因子与未来收益的相关性。|IC| 越大预测力越强。正值=同向，负值=反向，均有用。",
     "icirTooltip": "IC 信息比率：IC 的稳定性指标。|ICIR| 越大说明预测力越稳定，不是偶然。",
-    "winRateTooltip": "因子方向与未来价格方向一致的比例。高于 55% 视为较强。"
+    "winRateTooltip": "因子方向与未来价格方向一致的比例。高于 55% 视为较强。",
+    "customLab": "自定义因子实验室",
+    "customLabDesc": "输入因子表达式，评估其对历史数据的预测能力。",
+    "expressionPlaceholder": "例如 EMA(close, 7) / EMA(close, 21) - 1",
+    "evaluate": "评估",
+    "evaluating": "评估中...",
+    "availableFunctions": "可用函数",
+    "latestValue": "最新值",
+    "saveToLibrary": "保存到因子库",
+    "factorName": "因子名称",
+    "factorNamePlaceholder": "例如 EMA比率 7/21",
+    "description": "描述",
+    "descriptionPlaceholder": "可选描述",
+    "saving": "保存中...",
+    "saved": "因子保存成功",
+    "customTag": "自定义",
+    "expression": "表达式",
+    "source": "来源",
+    "deleteConfirm": "确定删除此自定义因子？",
+    "noCustomFactors": "暂无自定义因子，使用上方实验室创建。",
+    "syntaxError": "语法错误",
+    "evalError": "评估错误"
   }
 }
