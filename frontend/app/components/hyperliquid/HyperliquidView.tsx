@@ -124,7 +124,7 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
             </div>
           )}
         </div>
-        <div className="border text-card-foreground shadow p-4 md:p-6 space-y-4 md:space-y-6">
+        <div className="rounded-xl border text-card-foreground shadow p-4 md:p-6 space-y-4 md:space-y-6">
           <HyperliquidMultiAccountSummary
             accounts={accounts}
             refreshKey={refreshKey + chartRefreshKey}

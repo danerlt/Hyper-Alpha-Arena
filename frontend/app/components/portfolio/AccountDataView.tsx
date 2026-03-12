@@ -469,7 +469,7 @@ export default function AccountDataView(props: AccountDataViewProps) {
                   onHighlightAccountChange={handleArenaAccountChange}
                 />
               </div>
-              <div className="border text-card-foreground shadow p-6 space-y-6">
+              <div className="rounded-xl border text-card-foreground shadow p-6 space-y-6">
                 <HyperliquidSummary
                   accountId={overview?.account?.id}
                   refreshKey={accountRefreshTrigger}
