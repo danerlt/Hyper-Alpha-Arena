@@ -96,7 +96,7 @@ class ProgramExecutionService:
             AIDecisionLog.exchange == "binance",
             AIDecisionLog.hyperliquid_environment == "mainnet",
             AIDecisionLog.created_at >= today_start_utc,
-            AIDecisionLog.operation.notin_(["hold", "HOLD", "Hold"]),
+            AIDecisionLog.operation.in_(["buy", "sell", "close"]),
         ).scalar() or 0
 
         program_count = db.query(func.count(ProgramExecutionLog.id)).filter(
@@ -104,7 +104,7 @@ class ProgramExecutionService:
             ProgramExecutionLog.exchange == "binance",
             ProgramExecutionLog.environment == "mainnet",
             ProgramExecutionLog.created_at >= today_start_utc,
-            ProgramExecutionLog.decision_action.notin_(["hold", "HOLD", "Hold"]),
+            ProgramExecutionLog.decision_action.in_(["buy", "sell", "close"]),
         ).scalar() or 0
 
         used = ai_count + program_count
@@ -400,11 +400,16 @@ class ProgramExecutionService:
             # Execute strategy
             result = execute_strategy(program.code, market_data, params)
 
-            # Check daily quota for Binance mainnet non-rebate accounts BEFORE logging
-            # This ensures quota exceeded decisions are logged with success=False
+            # Determine if this is an actual trade (buy/sell/close) that needs quota check
             quota_exceeded = False
             quota_info = {}
-            if exchange == "binance" and (environment or "mainnet") == "mainnet":
+            is_trade = False
+            if result.success and result.decision:
+                op = result.decision.operation.lower() if hasattr(result.decision, 'operation') else (result.decision.action.value if hasattr(result.decision, 'action') else "")
+                is_trade = op in ["buy", "sell", "close"]
+
+            # Check daily quota only for actual trades (buy/sell/close), not HOLD/errors
+            if is_trade and exchange == "binance" and (environment or "mainnet") == "mainnet":
                 binance_wallet = db.query(BinanceWallet).filter(
                     BinanceWallet.account_id == account.id,
                     BinanceWallet.environment == (environment or "mainnet"),

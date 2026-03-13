@@ -785,22 +785,22 @@ async def get_daily_quota(account_id: int, db: Session = Depends(get_db)):
 
     today_start_utc = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # Count AIDecisionLog entries (only actual trades, not HOLD)
+    # Count AIDecisionLog entries (only actual trades: buy/sell/close)
     ai_count = db.query(func.count(AIDecisionLog.id)).filter(
         AIDecisionLog.account_id == account_id,
         AIDecisionLog.exchange == "binance",
         AIDecisionLog.hyperliquid_environment == "mainnet",
         AIDecisionLog.created_at >= today_start_utc,
-        AIDecisionLog.operation.notin_(["hold", "HOLD", "Hold"]),
+        AIDecisionLog.operation.in_(["buy", "sell", "close"]),
     ).scalar() or 0
 
-    # Count ProgramExecutionLog entries (only actual trades, not HOLD)
+    # Count ProgramExecutionLog entries (only actual trades: buy/sell/close)
     program_count = db.query(func.count(ProgramExecutionLog.id)).filter(
         ProgramExecutionLog.account_id == account_id,
         ProgramExecutionLog.exchange == "binance",
         ProgramExecutionLog.environment == "mainnet",
         ProgramExecutionLog.created_at >= today_start_utc,
-        ProgramExecutionLog.decision_action.notin_(["hold", "HOLD", "Hold"]),
+        ProgramExecutionLog.decision_action.in_(["buy", "sell", "close"]),
     ).scalar() or 0
 
     used = ai_count + program_count

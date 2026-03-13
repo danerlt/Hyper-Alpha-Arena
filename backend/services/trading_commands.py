@@ -76,22 +76,22 @@ def _check_binance_daily_quota(db: Session, account_id: int) -> Tuple[bool, Dict
     # Use UTC midnight for quota reset
     today_start_utc = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # Count AIDecisionLog entries (only actual trades, not HOLD)
+    # Count AIDecisionLog entries (only actual trades: buy/sell/close)
     ai_count = db.query(func.count(AIDecisionLog.id)).filter(
         AIDecisionLog.account_id == account_id,
         AIDecisionLog.exchange == "binance",
         AIDecisionLog.hyperliquid_environment == "mainnet",
         AIDecisionLog.created_at >= today_start_utc,
-        AIDecisionLog.operation.notin_(["hold", "HOLD", "Hold"]),
+        AIDecisionLog.operation.in_(["buy", "sell", "close"]),
     ).scalar() or 0
 
-    # Count ProgramExecutionLog entries (only actual trades, not HOLD)
+    # Count ProgramExecutionLog entries (only actual trades: buy/sell/close)
     program_count = db.query(func.count(ProgramExecutionLog.id)).filter(
         ProgramExecutionLog.account_id == account_id,
         ProgramExecutionLog.exchange == "binance",
         ProgramExecutionLog.environment == "mainnet",
         ProgramExecutionLog.created_at >= today_start_utc,
-        ProgramExecutionLog.decision_action.notin_(["hold", "HOLD", "Hold"]),
+        ProgramExecutionLog.decision_action.in_(["buy", "sell", "close"]),
     ).scalar() or 0
 
     used = ai_count + program_count
@@ -1508,7 +1508,13 @@ def _execute_binance_decision(
         save_ai_decision(db, account, decision, portfolio, executed=False, **decision_kwargs)
         return
 
-    # 2. Check daily quota for mainnet non-rebate accounts BEFORE any execution (including HOLD)
+    # 2. Handle HOLD operation (no quota consumption, no execution needed)
+    if operation == "hold":
+        logger.info(f"[BINANCE] AI decided to HOLD for {account.name} - no action taken")
+        save_ai_decision(db, account, decision, portfolio, executed=True, **decision_kwargs)
+        return
+
+    # 3. Check daily quota for mainnet non-rebate accounts (only for buy/sell/close)
     if wallet and wallet.environment == "mainnet" and wallet.rebate_working is False:
         quota_exceeded, quota_info = _check_binance_daily_quota(db, account.id)
         if quota_exceeded:
@@ -1521,12 +1527,6 @@ def _execute_binance_decision(
             decision["_quota_info"] = quota_info
             save_ai_decision(db, account, decision, portfolio, executed=False, **decision_kwargs)
             return
-
-    # 3. Handle HOLD operation (after quota check)
-    if operation == "hold":
-        logger.info(f"[BINANCE] AI decided to HOLD for {account.name} - no action taken")
-        save_ai_decision(db, account, decision, portfolio, executed=True, **decision_kwargs)
-        return
 
     # 4. Validate symbol
     if not symbol:
