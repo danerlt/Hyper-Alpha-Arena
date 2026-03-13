@@ -76,20 +76,22 @@ def _check_binance_daily_quota(db: Session, account_id: int) -> Tuple[bool, Dict
     # Use UTC midnight for quota reset
     today_start_utc = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # Count AIDecisionLog entries
+    # Count AIDecisionLog entries (only actual trades, not HOLD)
     ai_count = db.query(func.count(AIDecisionLog.id)).filter(
         AIDecisionLog.account_id == account_id,
         AIDecisionLog.exchange == "binance",
         AIDecisionLog.hyperliquid_environment == "mainnet",
-        AIDecisionLog.created_at >= today_start_utc
+        AIDecisionLog.created_at >= today_start_utc,
+        AIDecisionLog.operation.notin_(["hold", "HOLD", "Hold"]),
     ).scalar() or 0
 
-    # Count ProgramExecutionLog entries
+    # Count ProgramExecutionLog entries (only actual trades, not HOLD)
     program_count = db.query(func.count(ProgramExecutionLog.id)).filter(
         ProgramExecutionLog.account_id == account_id,
         ProgramExecutionLog.exchange == "binance",
         ProgramExecutionLog.environment == "mainnet",
-        ProgramExecutionLog.created_at >= today_start_utc
+        ProgramExecutionLog.created_at >= today_start_utc,
+        ProgramExecutionLog.decision_action.notin_(["hold", "HOLD", "Hold"]),
     ).scalar() or 0
 
     used = ai_count + program_count
