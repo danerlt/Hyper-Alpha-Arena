@@ -1675,7 +1675,10 @@ const MessageBubble = memo(function MessageBubble({
                       href={href}
                       target="_blank"
                       rel={isInternal ? undefined : 'noopener noreferrer'}
-                      className="text-primary hover:underline"
+                      className={isUser
+                        ? 'text-white underline hover:text-white/80'
+                        : 'text-primary hover:underline'
+                      }
                     >
                       {children}
                     </a>
