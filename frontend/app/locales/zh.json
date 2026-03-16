@@ -1779,5 +1779,29 @@
     "configured": "配置成功",
     "fieldRequired": "{{field}} 为必填项",
     "keyConfigured": "输入新密钥以更新"
+  },
+  "arena": {
+    "viewToggle": {
+      "arena": "竞技场",
+      "chart": "图表"
+    },
+    "status": {
+      "offline": "离线",
+      "error": "异常",
+      "program": "程序运行",
+      "traded": "已交易",
+      "thinking": "思考中",
+      "profit": "盈利",
+      "loss": "亏损",
+      "idle": "待命"
+    },
+    "hud": {
+      "equity": "权益",
+      "positions": "仓位",
+      "noPositions": "无持仓"
+    },
+    "hyperAI": {
+      "tooltip": "与 Hyper AI 对话"
+    }
   }
 }

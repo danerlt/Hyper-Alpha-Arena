@@ -16,10 +16,12 @@
 import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTradingMode } from '@/contexts/TradingModeContext'
-import { getArenaPositions, getArenaTrades, ArenaTrade } from '@/lib/api'
+import { getArenaPositions, getArenaTrades, getAccounts, ArenaTrade, TradingAccount } from '@/lib/api'
 import AlphaArenaFeed from '@/components/portfolio/AlphaArenaFeed'
 import HyperliquidMultiAccountSummary from '@/components/portfolio/HyperliquidMultiAccountSummary'
 import HyperliquidAssetChart, { TradeMarker } from './HyperliquidAssetChart'
+import ArenaView from '@/components/arena/ArenaView'
+import ViewToggle, { type ViewMode, getStoredViewMode } from '@/components/arena/ViewToggle'
 
 interface HyperliquidViewProps {
   wsRef?: React.MutableRefObject<WebSocket | null>
@@ -37,6 +39,8 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const [selectedExchange, setSelectedExchange] = useState<'all' | 'hyperliquid' | 'binance'>('all')
   const [tradeMarkers, setTradeMarkers] = useState<TradeMarker[]>([])
+  const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode)
+  const [fullAccounts, setFullAccounts] = useState<TradingAccount[]>([])
   const environment = tradingMode === 'testnet' || tradingMode === 'mainnet' ? tradingMode : undefined
 
   // Load data from APIs
@@ -44,11 +48,13 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
     const loadData = async () => {
       try {
         setLoading(true)
-        const [positions, tradesRes] = await Promise.all([
+        const [positions, tradesRes, accountsList] = await Promise.all([
           getArenaPositions({ trading_mode: tradingMode }),
-          getArenaTrades({ trading_mode: tradingMode, limit: 200 })
+          getArenaTrades({ trading_mode: tradingMode, limit: 200 }),
+          getAccounts()
         ])
         setPositionsData(positions)
+        setFullAccounts(accountsList)
         // Convert trades to TradeMarker format
         const markers: TradeMarker[] = (tradesRes.trades || []).map((t: ArenaTrade) => ({
           trade_id: t.trade_id,
@@ -105,33 +111,76 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
 
   return (
     <div className="flex flex-col md:grid md:gap-6 md:grid-cols-5 h-full min-h-0 gap-4 pb-16 md:pb-0 overflow-y-auto md:overflow-hidden">
-      {/* Left Panel - Chart & Account Summary */}
+      {/* Left Panel - Arena or Chart & Account Summary */}
       <div className="md:col-span-3 flex flex-col gap-4 min-h-0">
-        <div className="flex-1 min-h-[250px] md:min-h-[320px]">
-          {positionsData?.accounts?.length > 0 ? (
-            <HyperliquidAssetChart
-              accountId={firstAccountId}
-              refreshTrigger={chartRefreshKey}
-              environment={environment}
-              selectedAccount={selectedAccount}
-              trades={tradeMarkers}
-              selectedSymbol={selectedSymbol}
-              selectedExchange={selectedExchange}
+        {/* View mode toggle */}
+        <div className="flex items-center justify-between">
+          <ViewToggle mode={viewMode} onChange={setViewMode} />
+        </div>
+
+        {viewMode === 'arena' ? (
+          /* Arena Mode — pixel trading floor */
+          <div className="flex-1 min-h-[280px]">
+            <ArenaView
+              accounts={accounts.map(acc => {
+                const full = fullAccounts.find(f => f.id === acc.account_id)
+                return {
+                  account_id: acc.account_id,
+                  account_name: acc.account_name,
+                  exchange: acc.exchange,
+                  auto_trading_enabled: full?.auto_trading_enabled,
+                  avatar_preset_id: full?.avatar_preset_id,
+                }
+              })}
+              positions={allPositions}
+              accountBalances={accounts.map(acc => {
+                const posAcc = positionsData?.accounts?.find(
+                  (a: any) => a.account_id === acc.account_id
+                )
+                return {
+                  accountId: acc.account_id,
+                  accountName: acc.account_name,
+                  exchange: acc.exchange || 'hyperliquid',
+                  balance: posAcc ? {
+                    totalEquity: posAcc.total_assets || 0,
+                    marginUsagePercent: posAcc.margin_usage_percent || 0,
+                  } : null,
+                  error: null,
+                }
+              })}
+              environment={environment || 'testnet'}
             />
-          ) : (
-            <div className="bg-card border border-border rounded-lg h-full flex items-center justify-center">
-              <div className="text-muted-foreground">{t('dashboard.noAccountConfigured', 'No Hyperliquid account configured')}</div>
+          </div>
+        ) : (
+          /* Chart Mode — existing chart + account summary */
+          <>
+            <div className="flex-1 min-h-[250px] md:min-h-[320px]">
+              {positionsData?.accounts?.length > 0 ? (
+                <HyperliquidAssetChart
+                  accountId={firstAccountId}
+                  refreshTrigger={chartRefreshKey}
+                  environment={environment}
+                  selectedAccount={selectedAccount}
+                  trades={tradeMarkers}
+                  selectedSymbol={selectedSymbol}
+                  selectedExchange={selectedExchange}
+                />
+              ) : (
+                <div className="bg-card border border-border rounded-lg h-full flex items-center justify-center">
+                  <div className="text-muted-foreground">{t('dashboard.noAccountConfigured', 'No Hyperliquid account configured')}</div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        <div className="rounded-xl border text-card-foreground shadow p-4 md:p-6 space-y-4 md:space-y-6">
-          <HyperliquidMultiAccountSummary
-            accounts={accounts}
-            refreshKey={refreshKey + chartRefreshKey}
-            selectedAccount={selectedAccount}
-            positions={allPositions}
-          />
-        </div>
+            <div className="rounded-xl border text-card-foreground shadow p-4 md:p-6 space-y-4 md:space-y-6">
+              <HyperliquidMultiAccountSummary
+                accounts={accounts}
+                refreshKey={refreshKey + chartRefreshKey}
+                selectedAccount={selectedAccount}
+                positions={allPositions}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Right Panel - Feed (hidden on mobile) */}

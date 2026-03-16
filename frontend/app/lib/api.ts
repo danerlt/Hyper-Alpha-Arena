@@ -160,6 +160,7 @@ export interface TradingAccount {
   wallet_address?: string | null  // Hyperliquid mainnet wallet address
   has_mainnet_wallet?: boolean  // Whether account has mainnet wallet configured
   show_on_dashboard?: boolean  // Whether to show on Dashboard views
+  avatar_preset_id?: number | null  // Arena View pixel character preset (1-12)
 }
 
 export interface TradingAccountCreate {

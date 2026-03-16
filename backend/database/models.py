@@ -65,6 +65,9 @@ class Account(Base):
     # Dashboard visibility
     show_on_dashboard = Column(Boolean, nullable=False, default=True)  # Show/hide on Dashboard views
 
+    # Arena View avatar preset (1-12, assigned randomly on creation)
+    avatar_preset_id = Column(Integer, nullable=True)
+
     # Soft delete
     is_deleted = Column(Boolean, nullable=False, server_default=text('false'))
     deleted_at = Column(TIMESTAMP, nullable=True)

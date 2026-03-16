@@ -210,7 +210,8 @@ async def list_all_accounts(include_hidden: bool = False, db: Session = Depends(
                 "auto_trading_enabled": account.auto_trading_enabled == "true",
                 "wallet_address": wallet_address,
                 "has_mainnet_wallet": has_mainnet_wallet,
-                "show_on_dashboard": account.show_on_dashboard
+                "show_on_dashboard": account.show_on_dashboard,
+                "avatar_preset_id": account.avatar_preset_id
             })
 
         return result
@@ -428,6 +429,9 @@ async def create_new_account(payload: dict, db: Session = Depends(get_db)):
         auto_trading_enabled = _normalize_bool(payload.get("auto_trading_enabled", True))
         auto_trading_value = "true" if auto_trading_enabled else "false"
 
+        import random
+        avatar_preset_id = random.randint(1, 12)
+
         new_account = Account(
             user_id=user.id,
             version="v1",
@@ -440,7 +444,8 @@ async def create_new_account(payload: dict, db: Session = Depends(get_db)):
             current_cash=float(payload.get("initial_capital", 10000.0)),
             frozen_cash=0.0,
             is_active="true",
-            auto_trading_enabled=auto_trading_value
+            auto_trading_enabled=auto_trading_value,
+            avatar_preset_id=avatar_preset_id
         )
         
         db.add(new_account)
@@ -499,7 +504,8 @@ async def create_new_account(payload: dict, db: Session = Depends(get_db)):
             "base_url": new_account.base_url,
             "api_key": new_account.api_key,
             "is_active": new_account.is_active == "true",
-            "auto_trading_enabled": new_account.auto_trading_enabled == "true"
+            "auto_trading_enabled": new_account.auto_trading_enabled == "true",
+            "avatar_preset_id": new_account.avatar_preset_id
         }
     except HTTPException:
         raise

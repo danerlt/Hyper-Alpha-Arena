@@ -1759,5 +1759,29 @@
     "configured": "Configured successfully",
     "fieldRequired": "{{field}} is required",
     "keyConfigured": "Enter new key to update"
+  },
+  "arena": {
+    "viewToggle": {
+      "arena": "Arena",
+      "chart": "Chart"
+    },
+    "status": {
+      "offline": "Offline",
+      "error": "Error",
+      "program": "Program",
+      "traded": "Traded",
+      "thinking": "Thinking",
+      "profit": "Profit",
+      "loss": "Loss",
+      "idle": "Idle"
+    },
+    "hud": {
+      "equity": "Equity",
+      "positions": "pos",
+      "noPositions": "No positions"
+    },
+    "hyperAI": {
+      "tooltip": "Chat with Hyper AI"
+    }
   }
 }
