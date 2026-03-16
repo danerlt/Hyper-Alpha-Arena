@@ -35,6 +35,8 @@ import requests
 import tiktoken
 from sqlalchemy.orm import Session
 
+from services.system_logger import system_logger
+
 logger = logging.getLogger(__name__)
 
 # Initialize tiktoken encoder (cl100k_base works for GPT-4, Claude, and most models)
@@ -56,42 +58,63 @@ class CompressionResult(TypedDict):
     compressed_message_count: int  # Number of messages compressed
     compressed_at: Optional[str]  # ISO timestamp of compression
 
-# Model context window sizes (updated 2026-02)
+# Model context window sizes (updated 2026-03)
 MODEL_CONTEXT_WINDOWS = {
-    # OpenAI
+    # OpenAI - GPT-5 series (must be listed before gpt-4 to match first)
+    "gpt-5.4": 272000,
+    "gpt-5.2": 400000,
+    "gpt-5": 400000,
+    # OpenAI - GPT-4 series
     "gpt-4.1": 1047576,
     "gpt-4o": 128000,
     "gpt-4o-mini": 128000,
     "gpt-4-turbo": 128000,
     "gpt-4": 8192,
+    # OpenAI - o-series reasoning models
+    "o4-mini": 200000,
     "o3": 200000,
     "o3-mini": 200000,
     "o1": 200000,
     "o1-mini": 128000,
     # Anthropic
+    "claude-opus-4": 200000,
+    "claude-sonnet-4": 200000,
+    "claude-haiku-4": 200000,
     "claude-3": 200000,
     "claude-sonnet": 200000,
     "claude-opus": 200000,
-    # Google
+    "claude-haiku": 200000,
+    # Google - Gemini 3 series (must be listed before gemini-2)
+    "gemini-3": 1000000,
+    "gemini-2.5": 1000000,
     "gemini-2": 1000000,
     "gemini-1.5": 1000000,
     # Deepseek
     "deepseek-chat": 128000,
     "deepseek-reasoner": 128000,
-    # Qwen
+    # Qwen - 3.5 series (must be listed before qwen3)
+    "qwen3.5": 262144,
+    "qwen3-coder": 262144,
     "qwen3": 262144,
     "qwen-max": 262144,
     "qwen-plus": 131072,
     "qwen-turbo": 131072,
     # xAI Grok
-    "grok-4": 262000,
+    "grok-4.1": 2000000,
+    "grok-4-fast": 2000000,
+    "grok-4": 256000,
     "grok-3": 131072,
+    # Meta Llama
+    "llama-4-scout": 10000000,
+    "llama-4-maverick": 1000000,
+    "llama-4": 1000000,
     # Moonshot
     "moonshot-v1-128k": 128000,
     "moonshot-v1-32k": 32000,
     "moonshot-v1-8k": 8000,
-    # GLM
-    "glm-4": 128000,
+    # GLM (Zhipu)
+    "glm-5": 200000,
+    "glm-4": 200000,
 }
 
 # Compression threshold (70% of context window - conservative for tokenizer differences)
@@ -165,8 +188,9 @@ def get_context_window(model: str) -> int:
         if key in model_lower:
             return size
 
-    # Default fallback
-    return 32000
+    # Default fallback (128K is the minimum for modern models in 2026)
+    logger.warning(f"Unknown model '{model}' for context window, using 128K fallback")
+    return 128000
 
 
 def should_compress(
@@ -577,7 +601,24 @@ def generate_summary(
         response = requests.post(endpoint, headers=headers, json=body, timeout=600)
 
         if response.status_code != 200:
-            logger.error(f"Compression API error: {response.status_code}")
+            resp_snippet = response.text[:500] if response.text else "empty"
+            logger.error(
+                f"Compression API error: status={response.status_code}, "
+                f"model={model}, endpoint={endpoint}, "
+                f"prompt_tokens~{estimate_tokens(prompt)}, "
+                f"response={resp_snippet}"
+            )
+            system_logger.add_log(
+                "ERROR", "system_error",
+                f"Compression API error: {response.status_code}",
+                {
+                    "model": model,
+                    "endpoint": endpoint,
+                    "status": response.status_code,
+                    "prompt_tokens": estimate_tokens(prompt),
+                    "response_snippet": resp_snippet[:200],
+                }
+            )
             return None
 
         data = response.json()
@@ -593,7 +634,12 @@ def generate_summary(
                 return choices[0].get("message", {}).get("content", "")
 
     except Exception as e:
-        logger.error(f"Compression failed: {e}")
+        logger.error(f"Compression failed: {type(e).__name__}: {e}")
+        system_logger.add_log(
+            "ERROR", "system_error",
+            f"Compression exception: {type(e).__name__}",
+            {"model": model, "error": str(e)[:300]}
+        )
 
     return None
 

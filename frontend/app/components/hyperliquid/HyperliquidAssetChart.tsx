@@ -217,9 +217,18 @@ export default function HyperliquidAssetChart({
       ...info
     }))
 
-    // Calculate baseline (initial capital)
-    const baseline = chartData.length > 0 && accountsData.length > 0 ?
-      chartData[0][accountsData[0].curveKey] || 1000 : 1000
+    // Calculate baseline (initial capital) - only meaningful for single account view
+    let baseline: number | null = null
+    if (chartData.length > 0 && accountsData.length === 1) {
+      // Single account: use first non-null data point as starting capital
+      for (const point of chartData) {
+        const val = point[accountsData[0].curveKey]
+        if (typeof val === 'number') {
+          baseline = val
+          break
+        }
+      }
+    }
 
     // Calculate Y-axis domain with smart padding
     const allValues = filteredData.map(item => item.total_assets).filter(val => typeof val === 'number')
@@ -641,9 +650,11 @@ export default function HyperliquidAssetChart({
               ]}
             />
 
-            <ReferenceLine y={baseline} stroke="#9CA3AF" strokeDasharray="4 4" ifOverflow="extendDomain" />
+            {baseline != null && accountsData.length === 1 && (
+              <ReferenceLine y={baseline} stroke="#9CA3AF" strokeDasharray="4 4" />
+            )}
 
-            {accountsData.length === 1 && (
+            {baseline != null && accountsData.length === 1 && (
               <Area
                 type="monotone"
                 dataKey={accountsData[0].curveKey}

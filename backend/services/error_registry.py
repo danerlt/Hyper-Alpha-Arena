@@ -148,6 +148,13 @@ REGISTRY: List[Dict] = [
      "affects": "data_collection", "suggestion": "No data for query. May be off-hours or new symbol."},
     {"pattern": r"UserWarning|ResourceWarning", "exchange": ALL, "severity": NOISE,
      "affects": "system", "suggestion": "Python runtime warning. No impact on functionality."},
+    # Context compression errors
+    {"pattern": r"Compression API error", "exchange": ALL, "severity": WARNING,
+     "affects": "ai_assistant", "suggestion": "Context compression API call failed. Check if the API relay supports long-output requests. Conversation will continue with truncated history."},
+    {"pattern": r"Compression exception", "exchange": ALL, "severity": WARNING,
+     "affects": "ai_assistant", "suggestion": "Context compression threw an exception. Conversation will continue with truncated history."},
+    {"pattern": r"Unknown model.*for context window", "exchange": ALL, "severity": INFO,
+     "affects": "ai_assistant", "suggestion": "Model not in known context window list, using 128K fallback. Consider adding the model to MODEL_CONTEXT_WINDOWS."},
 ]
 
 # Pre-compile patterns for performance
