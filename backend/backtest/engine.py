@@ -189,8 +189,10 @@ class ProgramBacktestEngine:
         resets the scheduled trigger timer, matching real-time execution behavior.
         """
         from program_trader.executor import SandboxExecutor
+        from concurrent.futures import ThreadPoolExecutor
 
-        executor = SandboxExecutor(timeout_seconds=5)
+        backtest_thread_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="backtest")
+        executor = SandboxExecutor(timeout_seconds=5, thread_pool=backtest_thread_pool)
         trades: List[BacktestTradeRecord] = []
         equity_curve: List[Dict[str, Any]] = []
         all_triggers: List[TriggerEvent] = []  # Track all triggers for logging
@@ -305,6 +307,7 @@ class ProgramBacktestEngine:
         logger.info(f"Executed {len(all_triggers)} triggers "
                    f"({signal_count} signal, {scheduled_count} scheduled)")
 
+        backtest_thread_pool.shutdown(wait=False)
         return trades, equity_curve, all_triggers
 
     def estimate_total_triggers(
@@ -358,9 +361,29 @@ class ProgramBacktestEngine:
         Handles dynamic scheduled trigger generation with timer reset.
         """
         from program_trader.executor import SandboxExecutor
+        from concurrent.futures import ThreadPoolExecutor
 
-        executor = SandboxExecutor(timeout_seconds=5)
-        all_trades: List[BacktestTradeRecord] = []  # Track all trades for recent_trades
+        backtest_thread_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="backtest")
+        executor = SandboxExecutor(timeout_seconds=5, thread_pool=backtest_thread_pool)
+
+        try:
+            yield from self._run_generator_body(
+                config, signal_triggers, account, simulator, data_provider, executor
+            )
+        finally:
+            backtest_thread_pool.shutdown(wait=False)
+
+    def _run_generator_body(
+        self,
+        config: BacktestConfig,
+        signal_triggers: List[TriggerEvent],
+        account: VirtualAccount,
+        simulator: ExecutionSimulator,
+        data_provider: HistoricalDataProvider,
+        executor,
+    ):
+        """Inner generator body for run_event_loop_generator."""
+        all_trades: List[BacktestTradeRecord] = []
 
         # Scheduled trigger state - now uses seconds directly
         scheduled_interval_ms = None

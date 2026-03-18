@@ -7,6 +7,7 @@ import ast
 import math
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, Future
 import threading
 import ctypes
 import traceback
@@ -98,9 +99,10 @@ def _raise_timeout_in_thread(thread_id: int):
 class SandboxExecutor:
     """Executes strategy code in a restricted environment."""
 
-    def __init__(self, timeout_seconds: int = 60):
+    def __init__(self, timeout_seconds: int = 60, thread_pool: Optional[ThreadPoolExecutor] = None):
         self.timeout_seconds = timeout_seconds
         self._execution_logs: list = []
+        self._thread_pool = thread_pool  # If provided, reuse pool threads (for backtest)
 
     def execute(
         self,
@@ -124,7 +126,6 @@ class SandboxExecutor:
 
         # Use threading for timeout (works in any thread, unlike signal.SIGALRM)
         result_holder = {"decision": None, "error": None}
-        execution_thread = None
 
         def run_sandbox():
             try:
@@ -134,23 +135,33 @@ class SandboxExecutor:
             except Exception as e:
                 result_holder["error"] = f"Execution error: {str(e)}\n{traceback.format_exc()}"
 
-        execution_thread = threading.Thread(target=run_sandbox, daemon=True)
-        execution_thread.start()
-        execution_thread.join(timeout=self.timeout_seconds)
+        if self._thread_pool:
+            # Backtest mode: reuse pool thread to avoid thread creation overhead
+            future = self._thread_pool.submit(run_sandbox)
+            try:
+                future.result(timeout=self.timeout_seconds)
+            except Exception:
+                # Timeout or other error - future may still be running
+                pass
+        else:
+            # Real-time mode: create dedicated thread (no concurrency limit)
+            execution_thread = threading.Thread(target=run_sandbox, daemon=True)
+            execution_thread.start()
+            execution_thread.join(timeout=self.timeout_seconds)
+
+            if execution_thread.is_alive():
+                # Thread still running - try to interrupt it
+                _raise_timeout_in_thread(execution_thread.ident)
+                execution_thread.join(timeout=0.5)
+                return ExecutionResult(
+                    success=False,
+                    decision=None,
+                    error=f"Execution timed out after {self.timeout_seconds}s",
+                    execution_time_ms=self.timeout_seconds * 1000,
+                    logs=self._execution_logs,
+                )
 
         execution_time = (time.time() - start_time) * 1000
-
-        if execution_thread.is_alive():
-            # Thread still running - try to interrupt it
-            _raise_timeout_in_thread(execution_thread.ident)
-            execution_thread.join(timeout=0.5)  # Give it a moment to clean up
-            return ExecutionResult(
-                success=False,
-                decision=None,
-                error=f"Execution timed out after {self.timeout_seconds}s",
-                execution_time_ms=self.timeout_seconds * 1000,
-                logs=self._execution_logs,
-            )
 
         if result_holder["error"]:
             return ExecutionResult(

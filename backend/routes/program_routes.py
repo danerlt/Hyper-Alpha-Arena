@@ -1790,6 +1790,16 @@ async def run_backtest(request: BacktestRequest, db: Session = Depends(get_db)):
         BacktestResult as BacktestResultData, TriggerEvent
     )
     from backtest.engine import INTERVAL_MS
+    import time
+
+    # Clamp end_time to current time (no future backtesting)
+    now_ms = int(time.time() * 1000)
+    if request.end_time_ms > now_ms:
+        request.end_time_ms = now_ms
+
+    # Validate time range
+    if request.end_time_ms <= request.start_time_ms:
+        raise HTTPException(status_code=400, detail="End time must be after start time")
 
     # Get binding info
     binding = db.query(AccountProgramBinding).filter(

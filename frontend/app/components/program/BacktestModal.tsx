@@ -148,6 +148,7 @@ export function BacktestModal({ open, onOpenChange, binding }: BacktestModalProp
   const [endDate, setEndDate] = useState('')
   const [endTime, setEndTime] = useState('23:59')
   const [initialBalance, setInitialBalance] = useState('10000')
+  const todayDate = new Date().toISOString().split('T')[0]
 
   // Execution state
   const [status, setStatus] = useState<BacktestStatus>('idle')
@@ -642,6 +643,7 @@ export function BacktestModal({ open, onOpenChange, binding }: BacktestModalProp
               <Input
                 type="date"
                 value={startDate}
+                max={todayDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 disabled={status === 'calculating' || status === 'running'}
                 className="w-32 h-8"
@@ -659,6 +661,7 @@ export function BacktestModal({ open, onOpenChange, binding }: BacktestModalProp
               <Input
                 type="date"
                 value={endDate}
+                max={todayDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 disabled={status === 'calculating' || status === 'running'}
                 className="w-32 h-8"
