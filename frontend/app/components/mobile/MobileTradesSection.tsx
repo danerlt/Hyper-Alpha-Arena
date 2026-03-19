@@ -21,6 +21,8 @@ interface TradesSectionProps {
   trades: ArenaTrade[]
   selectedAccount: number | 'all'
   loading: boolean
+  needsSync: boolean
+  unsyncCount: number
   updatingPnl: boolean
   showPnlConfirm: boolean
   setShowPnlConfirm: (show: boolean) => void
@@ -29,7 +31,7 @@ interface TradesSectionProps {
 }
 
 export default function TradesSection({
-  trades, selectedAccount, loading, updatingPnl, showPnlConfirm,
+  trades, selectedAccount, loading, needsSync, unsyncCount, updatingPnl, showPnlConfirm,
   setShowPnlConfirm, handleUpdatePnl, pnlResult
 }: TradesSectionProps) {
   const { t } = useTranslation()
@@ -63,6 +65,15 @@ export default function TradesSection({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {needsSync && (
+        <div className="flex items-center gap-2 rounded-lg border border-orange-500/60 bg-orange-500/15 p-2.5">
+          <RefreshCw className="h-3.5 w-3.5 flex-shrink-0 text-orange-600 dark:text-orange-400" />
+          <p className="text-xs text-orange-700 dark:text-orange-300">
+            {t('attribution.syncWarning', { count: unsyncCount })}
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>

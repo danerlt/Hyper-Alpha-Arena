@@ -6,6 +6,7 @@ import {
   ArenaModelChatEntry,
   ArenaPositionsAccount,
   ArenaTrade,
+  checkPnlSyncStatus,
   getArenaModelChat,
   getArenaPositions,
   getArenaTrades,
@@ -107,6 +108,8 @@ export default function AlphaArenaFeed({
   const [updatingPnl, setUpdatingPnl] = useState(false)
   const [pnlUpdateResult, setPnlUpdateResult] = useState<string | null>(null)
   const [showPnlConfirm, setShowPnlConfirm] = useState(false)
+  const [needsSync, setNeedsSync] = useState(false)
+  const [unsyncCount, setUnsyncCount] = useState(0)
 
   const [trades, setTrades] = useState<ArenaTrade[]>([])
   const [modelChat, setModelChat] = useState<ArenaModelChatEntry[]>([])
@@ -928,6 +931,28 @@ export default function AlphaArenaFeed({
   const isSectionCopied = (entryId: number, section: 'prompt' | 'reasoning' | 'decision') =>
     !!copiedSections[`${entryId}-${section}`]
 
+  const refreshPnlSyncStatus = useCallback(async () => {
+    if (tradingMode !== 'testnet' && tradingMode !== 'mainnet') {
+      setNeedsSync(false)
+      setUnsyncCount(0)
+      return
+    }
+
+    try {
+      const status = await checkPnlSyncStatus(tradingMode)
+      setNeedsSync(status.needs_sync)
+      setUnsyncCount(status.unsync_count)
+    } catch (err) {
+      console.error('[AlphaArenaFeed] Failed to check PnL sync status:', err)
+    }
+  }, [tradingMode])
+
+  useEffect(() => {
+    if (activeTab === 'trades') {
+      refreshPnlSyncStatus()
+    }
+  }, [activeTab, refreshPnlSyncStatus])
+
   // Handle PnL data update
   const handleUpdatePnl = async () => {
     setUpdatingPnl(true)
@@ -958,6 +983,7 @@ export default function AlphaArenaFeed({
             decisions: totalDecisions,
           })
         )
+        await refreshPnlSyncStatus()
         // Refresh trades data to show updated values
         setManualRefreshKey((key) => key + 1)
       } else {
@@ -1286,6 +1312,15 @@ export default function AlphaArenaFeed({
                     <span className="text-xs text-muted-foreground">{pnlUpdateResult}</span>
                   )}
                 </div>
+
+                {needsSync && (
+                  <div className="flex items-center gap-3 rounded-lg border border-orange-500/60 bg-orange-500/15 p-3">
+                    <RefreshCw className="h-4 w-4 flex-shrink-0 text-orange-600 dark:text-orange-400" />
+                    <p className="flex-1 text-sm text-orange-700 dark:text-orange-300">
+                      {t('attribution.syncWarning', { count: unsyncCount })}
+                    </p>
+                  </div>
+                )}
 
                 {/* PnL Update Confirmation Dialog */}
                 <Dialog open={showPnlConfirm} onOpenChange={setShowPnlConfirm}>

@@ -12,6 +12,7 @@ import {
 import {
   ArenaPositionsAccount,
   ArenaTrade,
+  checkPnlSyncStatus,
   getArenaPositions,
   getArenaTrades,
   updateArenaPnl,
@@ -34,10 +35,29 @@ export default function MobileDashboard() {
   const [updatingPnl, setUpdatingPnl] = useState(false)
   const [showPnlConfirm, setShowPnlConfirm] = useState(false)
   const [pnlResult, setPnlResult] = useState<string | null>(null)
+  const [needsSync, setNeedsSync] = useState(false)
+  const [unsyncCount, setUnsyncCount] = useState(0)
+
+  const refreshPnlSyncStatus = async () => {
+    if (tradingMode !== 'testnet' && tradingMode !== 'mainnet') {
+      setNeedsSync(false)
+      setUnsyncCount(0)
+      return
+    }
+
+    try {
+      const status = await checkPnlSyncStatus(tradingMode)
+      setNeedsSync(status.needs_sync)
+      setUnsyncCount(status.unsync_count)
+    } catch (error) {
+      console.error('Failed to check PnL sync status:', error)
+    }
+  }
 
   useEffect(() => {
     if (tradingMode === 'testnet' || tradingMode === 'mainnet') {
       loadData()
+      refreshPnlSyncStatus()
     }
   }, [tradingMode])
 
@@ -64,6 +84,7 @@ export default function MobileDashboard() {
       const result = await updateArenaPnl()
       if (result.success) {
         setPnlResult(t('feed.pnlUpdated', 'PnL data updated'))
+        await refreshPnlSyncStatus()
         loadData()
       } else {
         setPnlResult(result.errors?.[0] || t('feed.pnlUpdateFailed', 'Failed to update PnL'))
@@ -172,6 +193,8 @@ export default function MobileDashboard() {
             trades={filteredTrades}
             selectedAccount={selectedKey === 'all' ? 'all' : selectedAccountId!}
             loading={loading}
+            needsSync={needsSync}
+            unsyncCount={unsyncCount}
             updatingPnl={updatingPnl}
             showPnlConfirm={showPnlConfirm}
             setShowPnlConfirm={setShowPnlConfirm}

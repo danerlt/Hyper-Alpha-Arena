@@ -1412,10 +1412,17 @@ def update_pnl_data(db: Session = Depends(get_db)):
 
     Returns summary of updated records.
     """
-    from database.models import HyperliquidWallet, BinanceWallet, AccountPromptBinding
+    from database.models import (
+        HyperliquidWallet,
+        BinanceWallet,
+        AccountPromptBinding,
+        AIDecisionLog,
+        ProgramExecutionLog,
+    )
     from services.hyperliquid_environment import get_hyperliquid_client
     from decimal import Decimal
     from collections import defaultdict
+    from sqlalchemy import or_
 
     result = {
         "success": True,
@@ -1431,6 +1438,7 @@ def update_pnl_data(db: Session = Depends(get_db)):
         hl_wallets = db.query(HyperliquidWallet).all()
         if hl_wallets:
             hl_wallet_configs = {}
+            fetched_historical_addresses = set()
             for w in hl_wallets:
                 key = (w.account_id, w.environment)
                 if key not in hl_wallet_configs:
@@ -1443,6 +1451,66 @@ def update_pnl_data(db: Session = Depends(get_db)):
                     fills = client._get_user_fills(db)
                     all_hl_fills_by_env[environment].extend(fills)
                     logger.info(f"[Hyperliquid] Fetched {len(fills)} fills for account {account_id} on {environment}")
+
+                    current_query_addresses = {client.query_address.lower()}
+                    if getattr(client, "wallet_address", None):
+                        current_query_addresses.add(client.wallet_address.lower())
+
+                    historical_addresses = set()
+
+                    ai_rows = db.query(AIDecisionLog.wallet_address).filter(
+                        AIDecisionLog.account_id == account_id,
+                        AIDecisionLog.hyperliquid_environment == environment,
+                        AIDecisionLog.executed == "true",
+                        AIDecisionLog.pnl_updated_at == None,
+                        AIDecisionLog.wallet_address.isnot(None),
+                        or_(
+                            AIDecisionLog.hyperliquid_order_id != None,
+                            AIDecisionLog.tp_order_id != None,
+                            AIDecisionLog.sl_order_id != None,
+                        ),
+                    ).distinct().all()
+                    historical_addresses.update(
+                        addr.lower()
+                        for (addr,) in ai_rows
+                        if addr and addr.lower() not in current_query_addresses
+                    )
+
+                    prog_rows = db.query(ProgramExecutionLog.wallet_address).filter(
+                        ProgramExecutionLog.account_id == account_id,
+                        ProgramExecutionLog.environment == environment,
+                        ProgramExecutionLog.success == True,
+                        ProgramExecutionLog.pnl_updated_at == None,
+                        ProgramExecutionLog.wallet_address.isnot(None),
+                        or_(
+                            ProgramExecutionLog.hyperliquid_order_id != None,
+                            ProgramExecutionLog.tp_order_id != None,
+                            ProgramExecutionLog.sl_order_id != None,
+                        ),
+                    ).distinct().all()
+                    historical_addresses.update(
+                        addr.lower()
+                        for (addr,) in prog_rows
+                        if addr and addr.lower() not in current_query_addresses
+                    )
+
+                    for historical_address in sorted(historical_addresses):
+                        historical_key = (environment, historical_address)
+                        if historical_key in fetched_historical_addresses:
+                            continue
+                        try:
+                            historical_fills = client.sdk_info.user_fills(historical_address)
+                            all_hl_fills_by_env[environment].extend(historical_fills)
+                            fetched_historical_addresses.add(historical_key)
+                            logger.info(
+                                f"[Hyperliquid] Fetched {len(historical_fills)} historical fills "
+                                f"for address {historical_address} on {environment}"
+                            )
+                        except Exception as historical_err:
+                            logger.warning(
+                                f"[Hyperliquid] Failed to fetch historical fills for address "
+                                f"{historical_address} on {environment}: {historical_err}"
+                            )
                 except Exception as e:
                     error_msg = f"[Hyperliquid] Failed to fetch fills for account {account_id} on {environment}: {str(e)}"
                     logger.warning(error_msg)
