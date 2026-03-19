@@ -351,6 +351,13 @@ class BinanceTradingClient:
         # Use positionRisk endpoint for complete position data
         position_risk = self._request("GET", "/fapi/v3/positionRisk", signed=True)
         positions = []
+        user_fills: List[Dict[str, Any]] = []
+
+        if include_timing:
+            try:
+                user_fills = self.get_user_fills(limit=1000)
+            except Exception as e:
+                logger.warning(f"[BINANCE] Failed to get user fills for position timing: {e}")
 
         # Build max leverage map from leverageBracket API (one call for all symbols)
         max_leverage_map = {}
@@ -396,6 +403,26 @@ class BinanceTradingClient:
             # Determine side from position amount (positive=Long, negative=Short)
             side = "Long" if position_amt > 0 else "Short"
 
+            opened_at = None
+            opened_at_str = None
+            holding_duration_seconds = None
+            holding_duration_str = None
+
+            if include_timing and user_fills and symbol:
+                opened_at = self._calculate_position_opened_time(symbol, position_amt, user_fills)
+                if opened_at:
+                    utc_dt = datetime.utcfromtimestamp(opened_at / 1000)
+                    opened_at_str = utc_dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+
+                    current_time_ms = self._get_timestamp()
+                    holding_duration_seconds = (current_time_ms - opened_at) / 1000
+                    hours = int(holding_duration_seconds // 3600)
+                    minutes = int((holding_duration_seconds % 3600) // 60)
+                    if hours > 0:
+                        holding_duration_str = f"{hours}h {minutes}m"
+                    else:
+                        holding_duration_str = f"{minutes}m"
+
             positions.append({
                 # Unified fields (Hyperliquid-compatible)
                 "coin": symbol,
@@ -414,9 +441,60 @@ class BinanceTradingClient:
                 "maint_margin": float(pos.get("maintMargin", 0)),
                 "position_side": pos.get("positionSide", "BOTH"),
                 "max_leverage": max_leverage_map.get(symbol, 0),
+                "opened_at": opened_at,
+                "opened_at_str": opened_at_str,
+                "holding_duration_seconds": holding_duration_seconds,
+                "holding_duration_str": holding_duration_str,
             })
 
         return positions
+
+    def _calculate_position_opened_time(
+        self,
+        symbol: str,
+        current_position_size: float,
+        fills: List[Dict[str, Any]]
+    ) -> Optional[int]:
+        """
+        Calculate when the current position was opened based on user fills.
+
+        Mirrors Hyperliquid's timing logic so Program Trader gets the same
+        timing semantics across exchanges.
+        """
+        if not fills or abs(current_position_size) < 1e-8:
+            return None
+
+        symbol_fills = [f for f in fills if f.get("coin") == symbol]
+        symbol_fills.sort(key=lambda x: x.get("time", 0), reverse=True)
+
+        if not symbol_fills:
+            return None
+
+        position_tracker = current_position_size
+        earliest_time = None
+
+        for fill in symbol_fills:
+            sz = float(fill.get("sz", 0) or 0)
+            side = fill.get("side", "")
+
+            if side == "B":
+                position_before = position_tracker - sz
+            elif side == "A":
+                position_before = position_tracker + sz
+            else:
+                continue
+
+            if abs(position_before) < 1e-8:
+                earliest_time = fill.get("time")
+                break
+            elif (position_tracker > 0 and position_before < 0) or (position_tracker < 0 and position_before > 0):
+                earliest_time = fill.get("time")
+                break
+            else:
+                earliest_time = fill.get("time")
+                position_tracker = position_before
+
+        return earliest_time
 
     # ==================== Leverage Methods ====================
 

@@ -2069,6 +2069,17 @@ async def _run_backtest_with_progress(engine, config, signal_triggers, db, backt
             "trigger_market_regime": trigger.market_regime,
         }
 
+        for pos in decision_input.get("positions", {}).values():
+            opened_at = pos.get("opened_at")
+            if opened_at:
+                utc_dt = datetime.fromtimestamp(opened_at / 1000, tz=timezone.utc)
+                pos["opened_at_str"] = utc_dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+                holding_duration_seconds = max(0.0, (trigger.timestamp - opened_at) / 1000)
+                pos["holding_duration_seconds"] = holding_duration_seconds
+                hours = int(holding_duration_seconds // 3600)
+                minutes = int((holding_duration_seconds % 3600) // 60)
+                pos["holding_duration_str"] = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+
         decision_output = None
         if result and result.success and result.decision:
             decision = result.decision

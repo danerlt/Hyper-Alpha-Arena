@@ -599,6 +599,10 @@ class ProgramExecutionService:
                         "entry_price": pos.entry_price,
                         "unrealized_pnl": getattr(pos, 'unrealized_pnl', 0),
                         "leverage": getattr(pos, 'leverage', None),
+                        "opened_at": getattr(pos, 'opened_at', None),
+                        "opened_at_str": getattr(pos, 'opened_at_str', None),
+                        "holding_duration_seconds": getattr(pos, 'holding_duration_seconds', None),
+                        "holding_duration_str": getattr(pos, 'holding_duration_str', None),
                     }
 
             market_context = {

@@ -461,7 +461,12 @@ class ProgramBacktestEngine:
             # Snapshot account state BEFORE strategy execution (for logging)
             balance_before = account.balance
             positions_before = {
-                k: {"side": v.side, "size": v.size, "entry_price": v.entry_price}
+                k: {
+                    "side": v.side,
+                    "size": v.size,
+                    "entry_price": v.entry_price,
+                    "opened_at": v.entry_timestamp,
+                }
                 for k, v in account.positions.items()
             }
             used_margin_before = account.get_used_margin()
@@ -749,5 +754,4 @@ class ProgramBacktestEngine:
             start_time=config.start_time,
             end_time=config.end_time,
         )
-
 
