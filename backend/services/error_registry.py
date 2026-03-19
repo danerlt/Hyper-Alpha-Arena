@@ -55,7 +55,7 @@ REGISTRY: List[Dict] = [
     {"pattern": r"-2019.*Margin is insufficient", "exchange": BN, "severity": CRITICAL,
      "affects": "trade_execution", "suggestion": "Binance margin insufficient for this order."},
     {"pattern": r"-1021.*Timestamp.*recvWindow|recvWindow", "exchange": BN, "severity": CRITICAL,
-     "affects": "connectivity", "suggestion": "Server clock out of sync with Binance. Check NTP."},
+     "affects": "connectivity", "suggestion": "Signed request timestamp drifted outside Binance recvWindow. Check client time sync and transient network delay."},
 
     # -- LLM / AI --
     {"pattern": r"LLM.*call.*failed|Failed to call LLM|AI provider.*error", "exchange": ALL, "severity": CRITICAL,

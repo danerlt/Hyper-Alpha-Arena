@@ -34,6 +34,8 @@ class BinanceTradingClient:
     # API Endpoints
     MAINNET_BASE_URL = "https://fapi.binance.com"
     TESTNET_BASE_URL = "https://demo-fapi.binance.com"
+    DEFAULT_RECV_WINDOW = 10000
+    SERVER_TIME_SYNC_TTL_SECONDS = 30
 
     def __init__(
         self,
@@ -71,11 +73,52 @@ class BinanceTradingClient:
         self._last_used_weight: int = 0
         self._weight_cap: int = 2400  # Binance Futures default
 
+        # Signed requests need Binance server-aligned timestamps.
+        self._timestamp_offset_ms: int = 0
+        self._server_time_synced_at: float = 0.0
+
         logger.info(f"[BINANCE] Client initialized for {environment}")
 
-    def _get_timestamp(self) -> int:
-        """Get current timestamp in milliseconds."""
+    def _get_local_timestamp(self) -> int:
+        """Get local system timestamp in milliseconds."""
         return int(time.time() * 1000)
+
+    def _get_timestamp(self) -> int:
+        """Get Binance-aligned timestamp in milliseconds."""
+        return self._get_local_timestamp() + self._timestamp_offset_ms
+
+    def _sync_server_time(self, force: bool = False) -> int:
+        """
+        Sync local timestamp offset against Binance server time.
+
+        Uses the midpoint between request start/end to reduce the impact of
+        network latency on the offset estimate.
+        """
+        now = time.time()
+        if not force and self._server_time_synced_at and (
+            now - self._server_time_synced_at
+        ) < self.SERVER_TIME_SYNC_TTL_SECONDS:
+            return self._timestamp_offset_ms
+
+        url = f"{self.base_url}/fapi/v1/time"
+        request_start_ms = self._get_local_timestamp()
+        response = self.session.get(url, timeout=5)
+        request_end_ms = self._get_local_timestamp()
+        response.raise_for_status()
+
+        payload = response.json()
+        server_time_ms = int(payload["serverTime"])
+        midpoint_ms = (request_start_ms + request_end_ms) // 2
+
+        self._timestamp_offset_ms = server_time_ms - midpoint_ms
+        self._server_time_synced_at = time.time()
+
+        logger.debug(
+            "[BINANCE] Synced server time offset: %sms (round trip %sms)",
+            self._timestamp_offset_ms,
+            request_end_ms - request_start_ms,
+        )
+        return self._timestamp_offset_ms
 
     def _sign(self, params: Dict[str, Any]) -> str:
         """
@@ -94,6 +137,18 @@ class BinanceTradingClient:
             hashlib.sha256
         ).hexdigest()
         return signature
+
+    def _prepare_signed_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Build a fresh signed params dict with Binance-aligned timestamp."""
+        signed_params = dict(params)
+        signed_params["timestamp"] = self._get_timestamp()
+        signed_params["recvWindow"] = self.DEFAULT_RECV_WINDOW
+        signed_params["signature"] = self._sign(signed_params)
+        return signed_params
+
+    def _is_timestamp_error(self, error_code: Any, error_msg: Any) -> bool:
+        """Return True when Binance rejects the request due to timestamp drift."""
+        return str(error_code) == "-1021" or "recvWindow" in str(error_msg)
 
     def _request(
         self,
@@ -118,41 +173,60 @@ class BinanceTradingClient:
             Exception: On API error
         """
         url = f"{self.base_url}{endpoint}"
-        params = params or {}
+        base_params = dict(params or {})
+        max_attempts = 2 if signed else 1
 
-        if signed:
-            params["timestamp"] = self._get_timestamp()
-            params["recvWindow"] = 5000
-            params["signature"] = self._sign(params)
+        for attempt in range(max_attempts):
+            request_params = dict(base_params)
 
-        try:
-            if method == "GET":
-                response = self.session.get(url, params=params, timeout=10)
-            elif method == "DELETE":
-                response = self.session.delete(url, params=params, timeout=10)
-            else:
-                response = self.session.post(url, data=params, timeout=10)
-
-            # Log rate limit info and save to instance
-            used_weight = response.headers.get("X-MBX-USED-WEIGHT-1M", "0")
             try:
-                self._last_used_weight = int(used_weight)
-            except (ValueError, TypeError):
-                pass
-            logger.debug(f"[BINANCE] {method} {endpoint} - Weight: {used_weight}/{self._weight_cap}")
+                if signed:
+                    self._sync_server_time(force=(attempt > 0))
+                    request_params = self._prepare_signed_params(request_params)
 
-            if response.status_code != 200:
-                error_data = response.json() if response.text else {}
-                error_code = error_data.get("code", response.status_code)
-                error_msg = error_data.get("msg", response.text)
-                logger.error(f"[BINANCE] API Error: {error_code} - {error_msg}")
-                raise Exception(f"Binance API Error {error_code}: {error_msg}")
+                if method == "GET":
+                    response = self.session.get(url, params=request_params, timeout=10)
+                elif method == "DELETE":
+                    response = self.session.delete(url, params=request_params, timeout=10)
+                else:
+                    response = self.session.post(url, data=request_params, timeout=10)
 
-            return response.json()
+                # Log rate limit info and save to instance
+                used_weight = response.headers.get("X-MBX-USED-WEIGHT-1M", "0")
+                try:
+                    self._last_used_weight = int(used_weight)
+                except (ValueError, TypeError):
+                    pass
+                logger.debug(f"[BINANCE] {method} {endpoint} - Weight: {used_weight}/{self._weight_cap}")
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"[BINANCE] Request failed: {endpoint} - {e}")
-            raise
+                if response.status_code != 200:
+                    try:
+                        error_data = response.json() if response.text else {}
+                    except ValueError:
+                        error_data = {}
+
+                    error_code = error_data.get("code", response.status_code)
+                    error_msg = error_data.get("msg", response.text)
+
+                    if signed and attempt == 0 and self._is_timestamp_error(error_code, error_msg):
+                        logger.warning(
+                            "[BINANCE] Timestamp drift detected for %s %s, syncing server time and retrying once",
+                            method,
+                            endpoint,
+                        )
+                        self._server_time_synced_at = 0.0
+                        continue
+
+                    logger.error(f"[BINANCE] API Error: {error_code} - {error_msg}")
+                    raise Exception(f"Binance API Error {error_code}: {error_msg}")
+
+                return response.json()
+
+            except requests.exceptions.RequestException as e:
+                logger.error(f"[BINANCE] Request failed: {endpoint} - {e}")
+                raise
+
+        raise RuntimeError(f"Binance request retry loop exited unexpectedly: {method} {endpoint}")
 
     def _get_exchange_info(self) -> Dict[str, Any]:
         """
