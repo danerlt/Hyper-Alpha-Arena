@@ -13,7 +13,7 @@
  *
  * CURRENT STATUS: Active production component for multi-wallet Hyperliquid architecture
  */
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTradingMode } from '@/contexts/TradingModeContext'
 import { getArenaPositions, getArenaTrades, getAccounts, ArenaTrade, TradingAccount } from '@/lib/api'
@@ -29,6 +29,12 @@ interface HyperliquidViewProps {
   onPageChange?: (page: string) => void
 }
 
+interface ArenaActivitySignal {
+  seq: number
+  exchange: string
+  state: 'program_running' | 'ai_thinking'
+}
+
 export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }: HyperliquidViewProps) {
   const { t } = useTranslation()
   const { tradingMode } = useTradingMode()
@@ -41,6 +47,8 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
   const [tradeMarkers, setTradeMarkers] = useState<TradeMarker[]>([])
   const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode)
   const [fullAccounts, setFullAccounts] = useState<TradingAccount[]>([])
+  const [activitySignals, setActivitySignals] = useState<Record<number, ArenaActivitySignal>>({})
+  const activitySeqRef = useRef(0)
   const environment = tradingMode === 'testnet' || tradingMode === 'mainnet' ? tradingMode : undefined
 
   // Load data from APIs
@@ -76,6 +84,22 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
 
     loadData()
   }, [tradingMode, refreshKey])
+
+  const handleArenaActivity = (activity: {
+    accountId: number
+    exchange: string
+    state: 'program_running' | 'ai_thinking'
+  }) => {
+    activitySeqRef.current += 1
+    setActivitySignals(prev => ({
+      ...prev,
+      [activity.accountId]: {
+        seq: activitySeqRef.current,
+        exchange: activity.exchange || 'hyperliquid',
+        state: activity.state,
+      },
+    }))
+  }
 
   // Extract account list for multi-account summary
   const accounts = positionsData?.accounts?.map((acc: any) => ({
@@ -150,6 +174,7 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
                 }
               })}
               environment={environment || 'testnet'}
+              activitySignals={activitySignals}
             />
           </div>
         ) : (
@@ -194,6 +219,7 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
             onSelectedSymbolChange={setSelectedSymbol}
             onSelectedExchangeChange={setSelectedExchange}
             onPageChange={onPageChange}
+            onArenaActivity={handleArenaActivity}
           />
         </div>
       </div>

@@ -19,6 +19,7 @@ const MOODS = [
   { emoji: '😥', label: 'Loss', bg: '#78350f' },
   { emoji: '😰', label: 'Anxiety', bg: '#78350f' },
   { emoji: '🤔', label: 'Thinking', bg: '#1e3a5f' },
+  { emoji: '🤖', label: 'Robot', bg: '#1e3a5f' },
   { emoji: '💡', label: 'Idea', bg: '#1e3a5f' },
   { emoji: '⚡', label: 'Trading', bg: '#4a1d96' },
   { emoji: '☕', label: 'Break', bg: '#3b2f1e' },
@@ -373,9 +374,9 @@ const MAPPED_ANIMS = new Set([
 function MoodsTab() {
   return (
     <div className="space-y-6">
-      <h2 className="text-sm font-semibold">Emoji Mood Bubbles</h2>
+      <h2 className="text-sm font-semibold">Mood Bubbles</h2>
       <p className="text-xs text-muted-foreground">
-        Speech bubble with emoji above the character. Pick your preferred style and emojis.
+        Showcase of the bubble styles used by the live Arena view, including robot and idle variants.
       </p>
       <div className="flex flex-wrap gap-4">
         {MOODS.map(m => (
@@ -427,12 +428,12 @@ function MoodsTab() {
       </div>
 
       <div className="bg-blue-500/10 border border-blue-500/30 rounded p-3">
-        <h3 className="text-sm font-semibold text-blue-400">Proposed State → Emoji Mapping</h3>
+        <h3 className="text-sm font-semibold text-blue-400">Current State → Bubble Mapping</h3>
         <div className="grid grid-cols-2 gap-1 mt-2 text-xs text-muted-foreground">
-          <span>offline → 😴</span><span>idle → (no bubble)</span>
+          <span>offline → 😴</span><span>idle → ☕ or 💡</span>
           <span>holding_profit → 😄 or 😍</span><span>holding_loss → 😥 or 😰</span>
-          <span>just_traded → ⚡</span><span>program_running → 🤔</span>
-          <span>ai_thinking → 💡</span><span>error → 😡</span>
+          <span>just_traded → ⚡</span><span>program_running → movement only</span>
+          <span>ai_thinking → 🤖</span><span>error → 😡</span>
           <span>big_profit → 🎉</span><span>watching_news → 📰</span>
           <span>coffee_break → ☕</span>
         </div>

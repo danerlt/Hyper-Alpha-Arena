@@ -49,6 +49,11 @@ interface AlphaArenaFeedProps {
   onPageChange?: (page: string) => void
   onSelectedSymbolChange?: (symbol: string | null) => void
   onSelectedExchangeChange?: (exchange: 'all' | 'hyperliquid' | 'binance') => void
+  onArenaActivity?: (activity: {
+    accountId: number
+    exchange: string
+    state: 'program_running' | 'ai_thinking'
+  }) => void
 }
 
 type FeedTab = 'trades' | 'model-chat' | 'positions' | 'program'
@@ -86,6 +91,7 @@ export default function AlphaArenaFeed({
   onPageChange,
   onSelectedSymbolChange,
   onSelectedExchangeChange,
+  onArenaActivity,
 }: AlphaArenaFeedProps) {
   const { t } = useTranslation()
   const { getData, updateData } = useArenaData()
@@ -190,6 +196,21 @@ export default function AlphaArenaFeed({
   const prevManualRefreshKey = useRef(manualRefreshKey)
   const prevRefreshKey = useRef(refreshKey)
   const prevTradingMode = useRef(tradingMode)
+  const latestModelChatIdRef = useRef<number | null>(null)
+  const latestProgramLogIdRef = useRef<number | null>(null)
+
+  const emitArenaActivity = useCallback((activity: {
+    accountId: number
+    exchange?: string | null
+    state: 'program_running' | 'ai_thinking'
+  }) => {
+    if (!onArenaActivity) return
+    onArenaActivity({
+      accountId: activity.accountId,
+      exchange: activity.exchange || 'hyperliquid',
+      state: activity.state,
+    })
+  }, [onArenaActivity])
 
   // Sync external account selection with internal state
   useEffect(() => {
@@ -327,6 +348,12 @@ export default function AlphaArenaFeed({
           // Skip WebSocket updates when feed filter is active to prevent overwriting filtered results
           if (isFeedFiltered) return
 
+          emitArenaActivity({
+            accountId: msg.decision.account_id,
+            exchange: msg.decision.exchange,
+            state: 'ai_thinking',
+          })
+
           // Prepend new AI decision to the list
           setModelChat((prev) => {
             // Check if decision already exists to prevent duplicates
@@ -347,7 +374,7 @@ export default function AlphaArenaFeed({
     return () => {
       wsRef.current?.removeEventListener('message', handleMessage)
     }
-  }, [wsRef, activeAccount, cacheKey, walletAddress, writeCache, isFeedFiltered])
+  }, [wsRef, activeAccount, cacheKey, walletAddress, writeCache, isFeedFiltered, emitArenaActivity])
 
   // Load accounts for dropdown - use dedicated API instead of positions data
   const loadAccounts = useCallback(async () => {
@@ -469,6 +496,18 @@ export default function AlphaArenaFeed({
         operation: feedAction || undefined,
       })
       const newModelChat = chatRes.entries || []
+      const latestEntry = newModelChat[0]
+
+      if (latestEntry?.id) {
+        if (latestModelChatIdRef.current !== null && latestEntry.id !== latestModelChatIdRef.current) {
+          emitArenaActivity({
+            accountId: latestEntry.account_id,
+            exchange: latestEntry.exchange,
+            state: 'ai_thinking',
+          })
+        }
+        latestModelChatIdRef.current = latestEntry.id
+      }
 
       // If this is a background refresh and user has loaded more history, merge instead of replace
       if (isBackgroundRefresh && modelChat.length > MODEL_CHAT_LIMIT) {
@@ -507,7 +546,7 @@ export default function AlphaArenaFeed({
       return null
     }
 
-  }, [activeAccount, cacheKey, updateData, tradingMode, walletAddress, modelChat, mergeModelChatData, selectedSymbol, selectedExchange, isFeedFiltered, feedAfterTimeUTC, feedBeforeTimeUTC, feedAction])
+  }, [activeAccount, cacheKey, updateData, tradingMode, walletAddress, modelChat, mergeModelChatData, selectedSymbol, selectedExchange, isFeedFiltered, feedAfterTimeUTC, feedBeforeTimeUTC, feedAction, emitArenaActivity])
 
   // Load more model chat entries (lazy loading)
   const loadMoreModelChat = useCallback(async () => {
@@ -608,6 +647,18 @@ export default function AlphaArenaFeed({
         after: feedAfterTimeUTC,
         action: feedAction || undefined,
       })
+      const latestLog = logs[0]
+
+      if (latestLog?.id) {
+        if (latestProgramLogIdRef.current !== null && latestLog.id !== latestProgramLogIdRef.current) {
+          emitArenaActivity({
+            accountId: latestLog.account_id,
+            exchange: latestLog.exchange,
+            state: 'program_running',
+          })
+        }
+        latestProgramLogIdRef.current = latestLog.id
+      }
 
       // If background refresh and user has loaded more history, merge instead of replace
       if (backgroundRefresh && programLogs.length > PROGRAM_LOG_LIMIT) {
@@ -626,7 +677,7 @@ export default function AlphaArenaFeed({
       if (!backgroundRefresh) setLoadingProgram(false)
       return null
     }
-  }, [activeAccount, tradingMode, selectedExchange, programLogs, mergeProgramData, isFeedFiltered, feedAfterTimeUTC, feedBeforeTimeUTC, feedAction])
+  }, [activeAccount, tradingMode, selectedExchange, programLogs, mergeProgramData, isFeedFiltered, feedAfterTimeUTC, feedBeforeTimeUTC, feedAction, emitArenaActivity])
 
   // Load more program logs (lazy loading)
   const loadMoreProgramData = useCallback(async () => {

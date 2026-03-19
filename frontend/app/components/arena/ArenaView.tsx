@@ -29,6 +29,11 @@ interface ArenaViewProps {
   positions: Position[]
   accountBalances: AccountBalance[]
   environment: HyperliquidEnvironment
+  activitySignals?: Record<number, {
+    seq: number
+    exchange: string
+    state: 'program_running' | 'ai_thinking'
+  }>
 }
 
 function deriveState(
@@ -52,6 +57,7 @@ export default function ArenaView({
   positions,
   accountBalances,
   environment,
+  activitySignals = {},
 }: ArenaViewProps) {
   const { t } = useTranslation()
 
@@ -165,9 +171,10 @@ export default function ArenaView({
         avatarPresetId: acc.avatar_preset_id ?? null,
         exchanges,
         state,
+        activitySignal: activitySignals[acc.account_id],
       }
     })
-  }, [accounts, positions, accountBalances, equityMap])
+  }, [accounts, positions, accountBalances, equityMap, activitySignals])
 
   if (accounts.length === 0) {
     return (

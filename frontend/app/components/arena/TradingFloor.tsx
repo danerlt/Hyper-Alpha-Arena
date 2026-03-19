@@ -25,6 +25,11 @@ export interface TraderData {
   avatarPresetId: number | null
   exchanges: ExchangeMonitor[]
   state: CharacterState
+  activitySignal?: {
+    seq: number
+    exchange: string
+    state: 'program_running' | 'ai_thinking'
+  }
 }
 
 interface TradingFloorProps {
@@ -167,6 +172,7 @@ function VirtualCanvas({ traders, sceneConfig, canvasW, canvasH, wsVisualH }: {
               avatarPresetId={trader.avatarPresetId}
               state={trader.state}
               animationMap={animMap}
+              activitySignal={trader.activitySignal}
             />
           ))}
         </div>

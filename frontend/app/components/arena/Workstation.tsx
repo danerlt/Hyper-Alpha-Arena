@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import PixelCharacter from './PixelCharacter'
 import type { CharacterState } from './pixelData/characters'
 import type { ExchangeMonitor, MonitorPosition } from './TradingFloor'
@@ -9,12 +9,20 @@ interface WorkstationProps {
   avatarPresetId: number | null
   state: CharacterState
   animationMap?: Record<string, string>
+  activitySignal?: {
+    seq: number
+    exchange: string
+    state: 'program_running' | 'ai_thinking'
+  }
 }
 
 const EXCHANGE_LABEL: Record<string, { short: string; color: string }> = {
   hyperliquid: { short: 'HL', color: '#6ee7b7' },
   binance: { short: 'BN', color: '#f0b90b' },
 }
+
+const MOVE_DURATION_MS = 1100
+const ACTIVITY_DWELL_MS = 7000
 
 function getScreenBg(pnl: number | null): string {
   if (pnl && pnl > 0) return '#071208'
@@ -196,38 +204,57 @@ function Monitor({ ex, isOff, width, height }: {
 
 const EMOJI_PATH = '/static/arena-sprites/assets/emoji'
 
-const STATE_EMOJI: Partial<Record<CharacterState, { img: string; bg: string }>> = {
-  offline: { img: `${EMOJI_PATH}/sleeping.png`, bg: '#1e293b' },
-  holding_profit: { img: `${EMOJI_PATH}/grinning.png`, bg: '#14532d' },
-  holding_loss: { img: `${EMOJI_PATH}/sad.png`, bg: '#78350f' },
-  just_traded: { img: `${EMOJI_PATH}/zap.png`, bg: '#4a1d96' },
-  program_running: { img: `${EMOJI_PATH}/thinking.png`, bg: '#1e3a5f' },
-  ai_thinking: { img: `${EMOJI_PATH}/robot.png`, bg: '#1e3a5f' },
-  error: { img: `${EMOJI_PATH}/angry.png`, bg: '#7f1d1d' },
+type MoodOption = {
+  bg: string
+  img?: string
+  emoji?: string
+}
+
+const STATE_MOODS: Partial<Record<CharacterState, MoodOption[]>> = {
+  offline: [{ img: `${EMOJI_PATH}/sleeping.png`, bg: '#1e293b' }],
+  idle: [
+    { emoji: '☕', bg: '#3b2f1e' },
+    { img: `${EMOJI_PATH}/lightbulb.png`, bg: '#1e3a5f' },
+  ],
+  holding_profit: [{ img: `${EMOJI_PATH}/grinning.png`, bg: '#14532d' }],
+  holding_loss: [{ img: `${EMOJI_PATH}/sad.png`, bg: '#78350f' }],
+  just_traded: [{ img: `${EMOJI_PATH}/zap.png`, bg: '#4a1d96' }],
+  ai_thinking: [{ img: `${EMOJI_PATH}/robot.png`, bg: '#1e3a5f' }],
+  error: [{ img: `${EMOJI_PATH}/angry.png`, bg: '#7f1d1d' }],
 }
 
 function MoodBubble({ state }: { state: CharacterState }) {
-  const mood = STATE_EMOJI[state]
-  const [visible, setVisible] = useState(true)
+  const [moodIndex, setMoodIndex] = useState(0)
 
   useEffect(() => {
-    if (state === 'offline') return
-    if (state === 'idle') return
-    let cancelled = false
-    const run = () => {
-      if (cancelled) return
-      setVisible(true)
-      setTimeout(() => {
-        if (cancelled) return
-        setVisible(false)
-        setTimeout(() => { if (!cancelled) run() }, 3000 + Math.random() * 2000)
-      }, 2500 + Math.random() * 1500)
+    const moods = STATE_MOODS[state] || []
+    if (moods.length === 0) {
+      setMoodIndex(0)
+      return
     }
-    const t = setTimeout(run, Math.random() * 2000)
-    return () => { cancelled = true; clearTimeout(t) }
+
+    const pickMoodIndex = () => {
+      if (state === 'idle') {
+        return Math.random() < 0.7 ? 0 : 1
+      }
+      return 0
+    }
+
+    setMoodIndex(pickMoodIndex())
+
+    if (state !== 'idle') {
+      return
+    }
+
+    const timer = setInterval(() => {
+      setMoodIndex(pickMoodIndex())
+    }, 6000)
+
+    return () => clearInterval(timer)
   }, [state])
 
-  if (!mood || (!visible && state !== 'offline')) return null
+  const mood = (STATE_MOODS[state] || [])[moodIndex]
+  if (!mood) return null
 
   return (
     <div className="absolute" style={{
@@ -239,7 +266,11 @@ function MoodBubble({ state }: { state: CharacterState }) {
         borderRadius: 10, padding: 3,
         boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
       }}>
-        <img src={mood.img} alt="" style={{ width: 20, height: 20, display: 'block' }} />
+        {mood.img ? (
+          <img src={mood.img} alt="" style={{ width: 20, height: 20, display: 'block' }} />
+        ) : (
+          <span style={{ display: 'block', fontSize: 18, lineHeight: 1 }}>{mood.emoji}</span>
+        )}
         <div style={{
           position: 'absolute', bottom: -6, left: 3,
           width: 0, height: 0,
@@ -252,7 +283,7 @@ function MoodBubble({ state }: { state: CharacterState }) {
 }
 
 export default function Workstation({
-  traderName, exchanges, avatarPresetId, state, animationMap,
+  traderName, exchanges, avatarPresetId, state, animationMap, activitySignal,
 }: WorkstationProps) {
   const isDual = exchanges.length >= 2
   const isOff = state === 'offline'
@@ -271,32 +302,146 @@ export default function Workstation({
     return 0
   }, [isDual, isOff, exchanges])
 
-  // Smooth transition: track displayed position
   const [displayIdx, setDisplayIdx] = useState(targetIdx)
+  const [travelIdx, setTravelIdx] = useState<number | null>(null)
   const [isMoving, setIsMoving] = useState(false)
+  const [dwellState, setDwellState] = useState<CharacterState | null>(null)
+  const [charDir, setCharDir] = useState<'up' | 'down' | 'left' | 'right'>(isOff ? 'down' : 'up')
+  const timeoutRef = useRef<{ arrival: ReturnType<typeof setTimeout> | null; settle: ReturnType<typeof setTimeout> | null }>({
+    arrival: null,
+    settle: null,
+  })
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const currentIdxRef = useRef(targetIdx)
+  const lastDirectionRef = useRef<'up' | 'down' | 'left' | 'right'>('up')
+
+  const clearPulseTimeouts = () => {
+    if (timeoutRef.current.arrival) {
+      clearTimeout(timeoutRef.current.arrival)
+      timeoutRef.current.arrival = null
+    }
+    if (timeoutRef.current.settle) {
+      clearTimeout(timeoutRef.current.settle)
+      timeoutRef.current.settle = null
+    }
+  }
+
+  const clearPulseTimers = () => {
+    clearPulseTimeouts()
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }
 
   useEffect(() => {
-    if (displayIdx !== targetIdx) {
-      setIsMoving(true)
-      const t = setTimeout(() => {
-        setDisplayIdx(targetIdx)
-        setIsMoving(false)
-      }, 1100)
-      return () => clearTimeout(t)
+    if (!isDual || isOff) {
+      setDisplayIdx(targetIdx)
+      setTravelIdx(null)
+      currentIdxRef.current = targetIdx
+      setIsMoving(false)
+      setDwellState(null)
+      setCharDir(isOff ? 'down' : 'up')
+      return
     }
-  }, [displayIdx, targetIdx])
+    if (!isMoving && dwellState === null && displayIdx !== targetIdx) {
+      const nextDir = targetIdx > displayIdx ? 'right' : 'left'
+      lastDirectionRef.current = nextDir
+      setCharDir(nextDir)
+      setIsMoving(true)
+      setTravelIdx(targetIdx)
+      clearPulseTimeouts()
+      timeoutRef.current.arrival = setTimeout(() => {
+        setDisplayIdx(targetIdx)
+        setTravelIdx(null)
+        currentIdxRef.current = targetIdx
+        setIsMoving(false)
+        setCharDir('up')
+      }, MOVE_DURATION_MS)
+    }
+  }, [isDual, isOff, targetIdx, displayIdx, isMoving, dwellState])
 
-  // Character direction & state
-  const charDir = (() => {
-    if (isOff) return 'down' as const
-    if (isMoving && targetIdx > displayIdx) return 'right' as const
-    if (isMoving && targetIdx < displayIdx) return 'left' as const
-    return 'up' as const
-  })()
+  const triggerPulse = (nextState: CharacterState, preferredIdx?: number) => {
+    if (!isDual || isOff) return
+    clearPulseTimeouts()
+
+    const currentIdx = currentIdxRef.current
+    const fallbackIdx = currentIdx === 0 ? 1 : 0
+    const destinationIdx = preferredIdx === undefined
+      ? fallbackIdx
+      : preferredIdx === currentIdx
+        ? fallbackIdx
+        : preferredIdx
+    const arrivalState = nextState === 'program_running' ? 'idle' : nextState
+
+    setDwellState(null)
+
+    if (destinationIdx === currentIdx) {
+      setDisplayIdx(destinationIdx)
+      setTravelIdx(null)
+      setIsMoving(false)
+      setCharDir('up')
+      setDwellState(arrivalState)
+      timeoutRef.current.settle = setTimeout(() => {
+        setDwellState(null)
+      }, ACTIVITY_DWELL_MS)
+      return
+    }
+
+    const nextDir = destinationIdx > currentIdx ? 'right' : 'left'
+    lastDirectionRef.current = nextDir
+    setCharDir(nextDir)
+    setIsMoving(true)
+    setTravelIdx(destinationIdx)
+
+    timeoutRef.current.arrival = setTimeout(() => {
+      setDisplayIdx(destinationIdx)
+      setTravelIdx(null)
+      currentIdxRef.current = destinationIdx
+      setIsMoving(false)
+      setCharDir('up')
+      setDwellState(arrivalState)
+      timeoutRef.current.settle = setTimeout(() => {
+        setDwellState(null)
+      }, ACTIVITY_DWELL_MS)
+    }, MOVE_DURATION_MS)
+  }
+
+  useEffect(() => {
+    if (!activitySignal || !isDual || isOff) return
+    const exchangeIdx = exchanges.findIndex(ex => ex.exchange === activitySignal.exchange)
+    triggerPulse(activitySignal.state, exchangeIdx >= 0 ? exchangeIdx : undefined)
+  }, [activitySignal?.seq])
+
+  useEffect(() => {
+    if (!isDual || isOff) return
+
+    const startPulseLoop = () => {
+      triggerPulse('idle')
+    }
+
+    const initialDelay = 20_000 + Math.random() * 20_000
+    const initialTimer = setTimeout(() => {
+      startPulseLoop()
+      intervalRef.current = setInterval(() => {
+        triggerPulse('idle')
+      }, 60_000)
+    }, initialDelay)
+
+    return () => {
+      clearTimeout(initialTimer)
+      clearPulseTimers()
+    }
+  }, [isDual, isOff, targetIdx])
+
+  useEffect(() => () => {
+    clearPulseTimers()
+  }, [])
 
   const charState = (() => {
     if (isOff) return 'offline' as const
     if (isMoving) return 'just_traded' as const
+    if (dwellState) return dwellState
     if (!isDual) return state
     const ex = exchanges[displayIdx]
     if (ex?.unrealizedPnl && ex.unrealizedPnl > 0) return 'holding_profit' as const
@@ -314,7 +459,8 @@ export default function Workstation({
   const wWidth = monAreaW + DESK_PAD * 2
 
   const spread = monCount > 1 ? (MON_W + MON_GAP) / 2 : 0
-  const charX = isDual && !isOff ? (targetIdx === 0 ? -spread : spread) : 0
+  const visualIdx = travelIdx ?? displayIdx
+  const charX = isDual && !isOff ? (visualIdx === 0 ? -spread : spread) : 0
 
   const monTop = 6
   const deskTop = monTop + MON_H + 7
