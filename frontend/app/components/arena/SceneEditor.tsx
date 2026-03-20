@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { OFFICIAL_SCENE_CONFIG, OFFICIAL_SCENE_VERSION } from './officialSceneConfig'
 
 // --- Types ---
 export interface PlacedAsset {
@@ -19,6 +20,7 @@ export interface WorkstationArea {
 }
 
 export interface SceneConfig {
+  sceneVersion?: number
   assets: PlacedAsset[]
   animationMap: Record<string, string>
   workstationArea?: WorkstationArea
@@ -72,6 +74,35 @@ const DEFAULT_ANIM_MAP: Record<string, string> = {
   ai_thinking: 'combat_idle',
   error: 'emote',
   offline: 'sit',
+}
+
+export function normalizeSceneConfig(config: Partial<SceneConfig> | null | undefined): SceneConfig {
+  const officialConfig = OFFICIAL_SCENE_CONFIG
+  const input = config || {}
+  const sceneVersion = typeof input.sceneVersion === 'number'
+    ? input.sceneVersion
+    : typeof officialConfig.sceneVersion === 'number'
+      ? officialConfig.sceneVersion
+      : OFFICIAL_SCENE_VERSION
+
+  return {
+    sceneVersion,
+    assets: Array.isArray(input.assets) ? input.assets : officialConfig.assets,
+    animationMap: {
+      ...officialConfig.animationMap,
+      ...(input.animationMap || {}),
+    },
+    workstationArea: getWsArea(input as SceneConfig),
+  }
+}
+
+export function shouldUseOfficialConfig(config: Partial<SceneConfig> | null | undefined): boolean {
+  if (!config) return true
+  const localVersion = typeof config.sceneVersion === 'number' ? config.sceneVersion : 0
+  const officialVersion = typeof OFFICIAL_SCENE_CONFIG.sceneVersion === 'number'
+    ? OFFICIAL_SCENE_CONFIG.sceneVersion
+    : OFFICIAL_SCENE_VERSION
+  return localVersion < officialVersion
 }
 
 // Pre-extracted individual item PNGs (auto-cropped by PIL)
@@ -710,9 +741,14 @@ function AnimationMapper({ map, onChange }: {
 function loadConfig(): SceneConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (!shouldUseOfficialConfig(parsed)) {
+        return normalizeSceneConfig(parsed)
+      }
+    }
   } catch { /* ignore */ }
-  return { assets: [], animationMap: { ...DEFAULT_ANIM_MAP }, workstationArea: { ...DEFAULT_WS_AREA } }
+  return normalizeSceneConfig(OFFICIAL_SCENE_CONFIG)
 }
 
 export default function SceneEditor() {
@@ -779,6 +815,18 @@ export default function SceneEditor() {
     }))
   }, [])
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      const parsed = raw ? JSON.parse(raw) : null
+      if (shouldUseOfficialConfig(parsed)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(loadConfig()))
+      }
+    } catch {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(loadConfig()))
+    }
+  }, [])
+
   return (
     <div className="space-y-4">
       <div className="flex gap-2 items-center">
@@ -786,7 +834,12 @@ export default function SceneEditor() {
           className="px-3 py-1.5 rounded text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500">
           {saved ? 'Saved!' : 'Save Config'}
         </button>
-        <button onClick={() => setConfig({ assets: [], animationMap: { ...DEFAULT_ANIM_MAP }, workstationArea: { ...DEFAULT_WS_AREA } })}
+        <button onClick={() => setConfig(normalizeSceneConfig({
+          sceneVersion: config.sceneVersion ?? OFFICIAL_SCENE_VERSION,
+          assets: [],
+          animationMap: { ...DEFAULT_ANIM_MAP },
+          workstationArea: { ...DEFAULT_WS_AREA },
+        }))}
           className="px-3 py-1.5 rounded text-sm font-medium bg-red-900/50 text-red-300 hover:bg-red-900/70">
           Reset All
         </button>

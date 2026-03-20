@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Workstation from './Workstation'
 import type { CharacterState } from './pixelData/characters'
 import type { PlacedAsset, SceneConfig } from './SceneEditor'
-import { STORAGE_KEY, CANVAS_W, CANVAS_H, getWsArea } from './SceneEditor'
+import { STORAGE_KEY, CANVAS_W, CANVAS_H, getWsArea, normalizeSceneConfig, shouldUseOfficialConfig } from './SceneEditor'
+import { OFFICIAL_SCENE_CONFIG } from './officialSceneConfig'
 
 export interface MonitorPosition {
   symbol: string
@@ -191,7 +192,18 @@ export default function TradingFloor({ traders }: TradingFloorProps) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) setSceneConfig(JSON.parse(raw))
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (!shouldUseOfficialConfig(parsed)) {
+          setSceneConfig(normalizeSceneConfig(parsed))
+          return
+        }
+      }
+    } catch { /* ignore */ }
+    const officialConfig = normalizeSceneConfig(OFFICIAL_SCENE_CONFIG)
+    setSceneConfig(officialConfig)
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(officialConfig))
     } catch { /* ignore */ }
   }, [])
 
