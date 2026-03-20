@@ -173,6 +173,26 @@ def initialize_services():
         else:
             print("[FactorEngine] Disabled (set FACTOR_ENGINE_ENABLED=true to enable)")
 
+        # Start News Collector Service (market intelligence)
+        from services.news_collector_service import news_collector_service
+        news_collector_service.start()
+        task_scheduler.add_interval_task(
+            task_func=news_collector_service.collect_all,
+            interval_seconds=60,  # Check every 60s, per-source intervals respected internally
+            task_id="news_collector"
+        )
+        print("News collector service started")
+        logger.info("News collector service started (60s scheduler, per-source intervals)")
+
+        # Start News AI Classification (batch job every 30 minutes)
+        from services.news_ai_classifier import classify_pending_articles
+        task_scheduler.add_interval_task(
+            task_func=classify_pending_articles,
+            interval_seconds=1800,  # 30 minutes
+            task_id="news_ai_classifier"
+        )
+        logger.info("News AI classifier scheduled (30-min interval)")
+
         logger.info("All services initialized successfully")
 
     except Exception as e:
@@ -207,6 +227,10 @@ def shutdown_services():
         # Stop Binance WebSocket collector
         from services.exchanges.binance_ws_collector import binance_ws_collector
         binance_ws_collector.stop()
+
+        # Stop News Collector
+        from services.news_collector_service import news_collector_service
+        news_collector_service.stop()
 
         stop_scheduler()
         logger.info("All services have been shut down")

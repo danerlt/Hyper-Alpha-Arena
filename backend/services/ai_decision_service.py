@@ -962,6 +962,23 @@ def _build_prompt_context(
             logger.warning(f"Failed to build factor context: {e}", exc_info=True)
 
     # ============================================================================
+    # NEWS INTELLIGENCE VARIABLES
+    # ============================================================================
+    # Process news variables like {BTC_news_sentiment}, {BTC_news_headlines_4h},
+    # {macro_news}, {general_news} from prompt template.
+    news_context = {}
+    if template_text:
+        try:
+            from services.news_prompt_variables import build_news_context
+            from database.connection import SessionLocal
+            with SessionLocal() as news_db:
+                news_context = build_news_context(template_text, news_db)
+            if news_context:
+                logger.debug(f"Built news context with {len(news_context)} variables")
+        except Exception as e:
+            logger.warning(f"Failed to build news context: {e}", exc_info=True)
+
+    # ============================================================================
     # TRIGGER CONTEXT FORMATTING
     # ============================================================================
     # Format trigger context into structured text for AI prompt.
@@ -1241,6 +1258,8 @@ Regime Types:
         **market_regime_context,  # Merge {market_regime}, {BTC_market_regime_5m}, etc.
         # Factor variables like {BTC_factor_1h_RSI21}
         **factor_context,
+        # News intelligence variables like {BTC_news_sentiment}, {macro_news}, etc.
+        **news_context,
     }
 
 

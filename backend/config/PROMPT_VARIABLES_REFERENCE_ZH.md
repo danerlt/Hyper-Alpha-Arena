@@ -372,6 +372,101 @@ Hourly Context:
 
 ---
 
+## 新闻情报变量（市场新闻）
+
+从多个加密新闻源实时采集、AI 分类的市场新闻数据。
+
+### 单币种新闻
+
+| 变量 | 描述 |
+|------|------|
+| `{BTC_news_sentiment}` | 情绪统计：看涨/看跌/中性数量 |
+| `{BTC_news_headlines}` | 标题列表（含时间戳和情绪标签） |
+| `{BTC_news_detail}` | 标题 + 新闻摘要（原文或 AI 压缩） |
+
+将 `BTC` 替换为任意币种（ETH、SOL 等）即可获取对应新闻。
+
+### 宏观新闻（经济与地缘政治）
+
+| 变量 | 描述 |
+|------|------|
+| `{macro_news}` | 宏观新闻标题（美联储、CPI、GDP、关税、地缘政治） |
+| `{macro_news_detail}` | 宏观新闻标题 + 摘要 |
+| `{macro_news_sentiment}` | 宏观新闻情绪统计 |
+
+### 加密行业新闻（通用，不绑定特定币种）
+
+| 变量 | 描述 |
+|------|------|
+| `{crypto_news}` | 加密行业通用新闻标题 |
+| `{crypto_news_detail}` | 加密行业新闻标题 + 摘要 |
+| `{crypto_news_sentiment}` | 加密行业新闻情绪统计 |
+
+### 时间窗口后缀
+
+所有新闻变量默认 **24 小时**，添加后缀可调整：
+
+| 后缀 | 窗口 | 示例 |
+|------|------|------|
+| `_1h` | 1 小时 | `{BTC_news_headlines_1h}` |
+| `_4h` | 4 小时 | `{macro_news_detail_4h}` |
+| `_12h` | 12 小时 | `{crypto_news_12h}` |
+| `_24h` | 24 小时（默认） | `{BTC_news_sentiment_24h}` |
+
+### 输出格式示例
+
+**情绪统计** (`{BTC_news_sentiment}`):
+```
+BTC news sentiment (24h): 19 bullish, 20 bearish, 7 neutral (total 46). Dominant: bearish.
+```
+
+**标题列表** (`{macro_news}`):
+```
+Macro news (24h, 51 articles):
+[03-20 05:30] [bullish] Bank Executive Reinforces Bolivia's Cryptocurrency Pivot
+[03-20 04:30] [neutral] From Trillion-Dollar Chips to Power Grid Stress
+[03-19 22:00] [bearish] JPMorgan sees S&P 500 vulnerable as Brent tops $110
+...
+```
+
+**详细新闻** (`{BTC_news_detail}`):
+```
+BTC news (24h, 46 articles):
+[03-20 02:03] [bullish] Coinbase, Apex Group tokenize Bitcoin Yield Fund on Base
+  > Coinbase Asset Management's Anthony Bassili says the Bitcoin Yield Fund's tokenized share class checks "identity and eligibility at the token level" for compliance.
+[03-20 01:56] [bearish] Bitcoin Trails Money Supply Growth as Energy Costs and Rates Bite
+  > Bitcoin underperforms as high energy costs and restrictive monetary policy weigh on price recovery.
+...
+```
+
+### 使用示例
+
+轻量级（最少 Token）：
+```
+=== 市场新闻 ===
+{BTC_news_sentiment}
+{macro_news_sentiment}
+```
+
+标准（推荐）：
+```
+=== 市场新闻 ===
+{BTC_news_headlines}
+{macro_news}
+{crypto_news}
+```
+
+深度分析：
+```
+=== 市场新闻 ===
+{BTC_news_detail}
+{ETH_news_detail_4h}
+{macro_news_detail}
+{crypto_news_detail}
+```
+
+---
+
 ## 遗留变量（向后兼容）
 
 | 变量 | 描述 | 推荐替代 |

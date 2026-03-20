@@ -935,6 +935,11 @@ class MarketTradesAggregated(Base):
     vwap = Column(DECIMAL(18, 6), nullable=True)
     high_price = Column(DECIMAL(18, 6), nullable=True)
     low_price = Column(DECIMAL(18, 6), nullable=True)
+    # Large order tracking fields
+    large_buy_notional = Column(DECIMAL(24, 6), nullable=False, default=0, server_default=text("0"))
+    large_sell_notional = Column(DECIMAL(24, 6), nullable=False, default=0, server_default=text("0"))
+    large_buy_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    large_sell_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
 
     __table_args__ = (
@@ -1717,4 +1722,30 @@ class CustomFactor(Base):
 
     __table_args__ = (
         UniqueConstraint('name', name='custom_factors_name_unique'),
+    )
+
+
+class NewsArticle(Base):
+    """Aggregated news articles from multiple sources for market intelligence"""
+    __tablename__ = "news_articles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_domain = Column(String(255), nullable=False, index=True)
+    source_url = Column(Text, nullable=False)
+    title = Column(String(500), nullable=False)
+    summary = Column(Text, nullable=True)
+    published_at = Column(TIMESTAMP, nullable=True, index=True)
+    symbols = Column(Text, nullable=True)  # JSON array: ["BTC","ETH"]
+    sentiment = Column(String(20), nullable=True)  # bullish/bearish/neutral
+    sentiment_source = Column(String(20), nullable=True)  # api/keyword/ai
+    relevance_score = Column(Float, nullable=True)
+    ai_summary = Column(Text, nullable=True)
+    raw_data = Column(Text, nullable=True)
+    classified = Column(Boolean, nullable=False, default=False)
+    fetched_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+
+    __table_args__ = (
+        UniqueConstraint('source_domain', 'source_url',
+                         name='news_articles_source_unique'),
     )

@@ -372,6 +372,101 @@ Hourly Context:
 
 ---
 
+## News Intelligence Variables (Market News)
+
+Real-time news sentiment and headlines from multiple crypto news sources, classified by AI.
+
+### Per-Symbol News
+
+| Variable | Description |
+|----------|-------------|
+| `{BTC_news_sentiment}` | Sentiment stats: bullish/bearish/neutral counts |
+| `{BTC_news_headlines}` | Headlines with timestamps and sentiment tags |
+| `{BTC_news_detail}` | Headlines + article summaries (original text or AI-compressed) |
+
+Replace `BTC` with any symbol (ETH, SOL, etc.) to get news for that specific coin.
+
+### Macro News (Economic & Geopolitical)
+
+| Variable | Description |
+|----------|-------------|
+| `{macro_news}` | Macro headlines (Fed, CPI, GDP, tariffs, geopolitics) |
+| `{macro_news_detail}` | Macro headlines + summaries |
+| `{macro_news_sentiment}` | Macro sentiment stats |
+
+### Crypto Industry News (General, Not Coin-Specific)
+
+| Variable | Description |
+|----------|-------------|
+| `{crypto_news}` | General crypto industry headlines |
+| `{crypto_news_detail}` | Crypto industry headlines + summaries |
+| `{crypto_news_sentiment}` | Crypto industry sentiment stats |
+
+### Time Window Suffixes
+
+All news variables default to **24 hours**. Add a suffix to change:
+
+| Suffix | Window | Example |
+|--------|--------|---------|
+| `_1h` | 1 hour | `{BTC_news_headlines_1h}` |
+| `_4h` | 4 hours | `{macro_news_detail_4h}` |
+| `_12h` | 12 hours | `{crypto_news_12h}` |
+| `_24h` | 24 hours (default) | `{BTC_news_sentiment_24h}` |
+
+### Output Format Examples
+
+**Sentiment** (`{BTC_news_sentiment}`):
+```
+BTC news sentiment (24h): 19 bullish, 20 bearish, 7 neutral (total 46). Dominant: bearish.
+```
+
+**Headlines** (`{macro_news}`):
+```
+Macro news (24h, 51 articles):
+[03-20 05:30] [bullish] Bank Executive Reinforces Bolivia's Cryptocurrency Pivot
+[03-20 04:30] [neutral] From Trillion-Dollar Chips to Power Grid Stress: AI's Breakneck Week
+[03-19 22:00] [bearish] JPMorgan sees S&P 500 vulnerable as Brent tops $110
+...
+```
+
+**Detail** (`{BTC_news_detail}`):
+```
+BTC news (24h, 46 articles):
+[03-20 02:03] [bullish] Coinbase, Apex Group tokenize Bitcoin Yield Fund on Base
+  > Coinbase Asset Management's Anthony Bassili says the Bitcoin Yield Fund's tokenized share class checks "identity and eligibility at the token level" for compliance.
+[03-20 01:56] [bearish] Bitcoin Trails Money Supply Growth as Energy Costs and Rates Bite
+  > Bitcoin underperforms as high energy costs and restrictive monetary policy weigh on price recovery.
+...
+```
+
+### Example Usage
+
+Lightweight (minimal tokens):
+```
+=== MARKET NEWS ===
+{BTC_news_sentiment}
+{macro_news_sentiment}
+```
+
+Standard (recommended):
+```
+=== MARKET NEWS ===
+{BTC_news_headlines}
+{macro_news}
+{crypto_news}
+```
+
+Deep analysis:
+```
+=== MARKET NEWS ===
+{BTC_news_detail}
+{ETH_news_detail_4h}
+{macro_news_detail}
+{crypto_news_detail}
+```
+
+---
+
 ## Legacy Variables (Backward Compatibility)
 
 | Variable | Description | Recommended Alternative |

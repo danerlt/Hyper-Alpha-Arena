@@ -3,6 +3,14 @@ import { useTranslation } from 'react-i18next'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   getHyperliquidAvailableSymbols,
@@ -11,8 +19,18 @@ import {
   getBinanceAvailableSymbols,
   getBinanceWatchlist,
   updateBinanceWatchlist,
+  getNewsSources,
+  updateNewsSources,
+  testNewsSource,
+  getNewsStats,
 } from '@/lib/api'
-import type { HyperliquidSymbolMeta, BinanceSymbolMeta } from '@/lib/api'
+import type {
+  HyperliquidSymbolMeta,
+  BinanceSymbolMeta,
+  NewsSourceConfig,
+  NewsStatsResponse,
+  TestNewsSourceResponse,
+} from '@/lib/api'
 import DataCoverageHeatmap from './DataCoverageHeatmap'
 import ExchangeIcon from '@/components/exchange/ExchangeIcon'
 
@@ -84,6 +102,23 @@ export default function SettingsPage() {
   // Track if we just completed a backfill (for one-time success message)
   const [backfillJustCompleted, setBackfillJustCompleted] = useState<Record<string, boolean>>({})
 
+  // News sources state
+  const [newsSources, setNewsSources] = useState<NewsSourceConfig[]>([])
+  const [newsSourcesSnapshot, setNewsSourcesSnapshot] = useState('[]')
+  const [newsStats, setNewsStats] = useState<NewsStatsResponse | null>(null)
+  const [newsLoading, setNewsLoading] = useState(false)
+  const [newsSaving, setNewsSaving] = useState(false)
+  const [newsError, setNewsError] = useState<string | null>(null)
+  const [newsSuccess, setNewsSuccess] = useState<string | null>(null)
+  const [newsFormAdapter, setNewsFormAdapter] = useState<'rss_generic' | 'cryptopanic' | 'finnhub_calendar'>('rss_generic')
+  const [newsTestUrl, setNewsTestUrl] = useState('')
+  const [newsFormInterval, setNewsFormInterval] = useState('300')
+  const [newsFormAuthToken, setNewsFormAuthToken] = useState('')
+  const [newsFormApiKey, setNewsFormApiKey] = useState('')
+  const [newsTesting, setNewsTesting] = useState(false)
+  const [newsTestError, setNewsTestError] = useState<string | null>(null)
+  const [newsTestResult, setNewsTestResult] = useState<TestNewsSourceResponse | null>(null)
+
   // Determine current exchange from active tab
   const currentExchange = activeTab === 'hyperliquid-data' ? 'hyperliquid' : activeTab === 'binance-data' ? 'binance' : null
 
@@ -142,6 +177,25 @@ export default function SettingsPage() {
     }
   }, [])
 
+  const fetchNewsSourcesData = useCallback(async () => {
+    setNewsLoading(true)
+    setNewsError(null)
+    try {
+      const [sourcesRes, statsRes] = await Promise.all([
+        getNewsSources(),
+        getNewsStats(),
+      ])
+      const nextSources = sourcesRes.sources || []
+      setNewsSources(nextSources)
+      setNewsSourcesSnapshot(JSON.stringify(nextSources))
+      setNewsStats(statsRes)
+    } catch (err) {
+      setNewsError(err instanceof Error ? err.message : 'Failed to load news sources')
+    } finally {
+      setNewsLoading(false)
+    }
+  }, [])
+
   // Load watchlist on mount
   useEffect(() => {
     fetchWatchlist()
@@ -153,6 +207,12 @@ export default function SettingsPage() {
       fetchStorageStats(currentExchange)
     }
   }, [currentExchange, storageStats, fetchStorageStats])
+
+  useEffect(() => {
+    if (activeTab === 'news-sources' && !newsLoading && !newsStats && newsSources.length === 0) {
+      fetchNewsSourcesData()
+    }
+  }, [activeTab, newsLoading, newsStats, newsSources.length, fetchNewsSourcesData])
 
   // Fetch backfill status for an exchange
   const fetchBackfillStatus = useCallback(async (exchange: string) => {
@@ -340,6 +400,185 @@ export default function SettingsPage() {
     }
   }
 
+  const enabledNewsSourceCount = useMemo(
+    () => newsSources.filter((source) => source.enabled).length,
+    [newsSources]
+  )
+
+  const hasUnsavedNewsSources = useMemo(
+    () => JSON.stringify(newsSources) !== newsSourcesSnapshot,
+    [newsSources, newsSourcesSnapshot]
+  )
+
+  const newsCountsByDomain = useMemo(() => {
+    return Object.entries(newsStats?.last_24h?.by_domain || {}).reduce<Record<string, number>>((acc, [domain, count]) => {
+      const normalizedDomain = domain.replace(/^www\./, '')
+      acc[normalizedDomain] = (acc[normalizedDomain] || 0) + count
+      return acc
+    }, {})
+  }, [newsStats])
+
+  const extractDomain = (url: string) => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '')
+    } catch {
+      return url
+    }
+  }
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return t('settings.notAvailable', 'N/A')
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return t('settings.notAvailable', 'N/A')
+    return date.toLocaleString(currentLang === 'zh' ? 'zh-CN' : 'en-US')
+  }
+
+  const handleToggleNewsSource = (index: number, enabled: boolean) => {
+    setNewsError(null)
+    setNewsSuccess(null)
+    setNewsSources((prev) => prev.map((source, sourceIndex) => (
+      sourceIndex === index ? { ...source, enabled } : source
+    )))
+  }
+
+  const handleSaveNewsSources = async () => {
+    setNewsSaving(true)
+    setNewsError(null)
+    setNewsSuccess(null)
+    try {
+      const result = await updateNewsSources(newsSources)
+      setNewsSources(result.sources || [])
+      setNewsSourcesSnapshot(JSON.stringify(result.sources || []))
+      setNewsSuccess(t('settings.newsSourcesSaved', 'News sources saved'))
+      const stats = await getNewsStats()
+      setNewsStats(stats)
+    } catch (err) {
+      setNewsError(err instanceof Error ? err.message : 'Failed to save news sources')
+    } finally {
+      setNewsSaving(false)
+    }
+  }
+
+  const buildNewsSourceConfig = (
+    adapter: 'rss_generic' | 'cryptopanic' | 'finnhub_calendar',
+    url: string
+  ) => {
+    const interval = parseInt(newsFormInterval, 10)
+    const intervalSeconds = Number.isFinite(interval) && interval > 0 ? interval : 300
+
+    const config: Record<string, any> = {}
+    if (adapter === 'cryptopanic' && newsFormAuthToken.trim()) {
+      config.auth_token = newsFormAuthToken.trim()
+    }
+    if (adapter === 'finnhub_calendar' && newsFormApiKey.trim()) {
+      config.api_key = newsFormApiKey.trim()
+    }
+
+    return {
+      type: adapter === 'rss_generic' ? 'rss' : 'api',
+      adapter,
+      url,
+      enabled: true,
+      interval_seconds: intervalSeconds,
+      config,
+    } satisfies NewsSourceConfig
+  }
+
+  const handleTestNewsSource = async () => {
+    const trimmedUrl = newsTestUrl.trim()
+    if (!trimmedUrl) {
+      setNewsTestError(t('settings.newsSourceUrlRequired', 'Please enter a source URL'))
+      setNewsTestResult(null)
+      return
+    }
+
+    try {
+      new URL(trimmedUrl)
+    } catch {
+      setNewsTestError(t('settings.newsSourceUrlInvalid', 'Please enter a valid URL'))
+      setNewsTestResult(null)
+      return
+    }
+
+    const interval = parseInt(newsFormInterval, 10)
+    if (!Number.isFinite(interval) || interval < 10) {
+      setNewsTestError(t('settings.newsSourceIntervalInvalid', 'Interval must be at least 10 seconds'))
+      setNewsTestResult(null)
+      return
+    }
+
+    if (newsFormAdapter === 'cryptopanic' && !newsFormAuthToken.trim()) {
+      setNewsTestError(t('settings.newsSourceAuthTokenRequired', 'Please enter a CryptoPanic auth token'))
+      setNewsTestResult(null)
+      return
+    }
+
+    if (newsFormAdapter === 'finnhub_calendar' && !newsFormApiKey.trim()) {
+      setNewsTestError(t('settings.newsSourceApiKeyRequired', 'Please enter a Finnhub API key'))
+      setNewsTestResult(null)
+      return
+    }
+
+    setNewsTesting(true)
+    setNewsTestError(null)
+    setNewsTestResult(null)
+    setNewsSuccess(null)
+
+    try {
+      const sourceConfig = buildNewsSourceConfig(newsFormAdapter, trimmedUrl)
+      const result = await testNewsSource({
+        url: trimmedUrl,
+        adapter: newsFormAdapter,
+        config: sourceConfig.config || {},
+      })
+      setNewsTestResult(result)
+      if (!result.success) {
+        setNewsTestError(result.error || t('settings.newsSourceTestFailed', 'Test failed'))
+      }
+    } catch (err) {
+      setNewsTestError(err instanceof Error ? err.message : 'Failed to test source')
+    } finally {
+      setNewsTesting(false)
+    }
+  }
+
+  const handleAddNewsSource = () => {
+    const trimmedUrl = newsTestUrl.trim()
+    if (!newsTestResult?.success || !trimmedUrl) {
+      return
+    }
+
+    if (newsSources.some((source) => source.url === trimmedUrl)) {
+      setNewsTestError(t('settings.newsSourceDuplicate', 'This source already exists'))
+      return
+    }
+
+    const nextSources = [...newsSources, buildNewsSourceConfig(newsFormAdapter, trimmedUrl)]
+
+    setNewsSources(nextSources)
+    setNewsFormAdapter('rss_generic')
+    setNewsTestUrl('')
+    setNewsFormInterval('300')
+    setNewsFormAuthToken('')
+    setNewsFormApiKey('')
+    setNewsTestError(null)
+    setNewsTestResult(null)
+    setNewsSuccess(t('settings.newsSourceAdded', 'Source added to the list. Save to apply.'))
+  }
+
+  const handleNewsSourceIntervalChange = (index: number, value: string) => {
+    setNewsError(null)
+    setNewsSuccess(null)
+    setNewsSources((prev) => prev.map((source, sourceIndex) => {
+      if (sourceIndex !== index) return source
+      const parsed = parseInt(value, 10)
+      return {
+        ...source,
+        interval_seconds: Number.isFinite(parsed) && parsed > 0 ? parsed : source.interval_seconds,
+      }
+    }))
+  }
+
   return (
     <div className="p-6 h-[calc(100vh-64px)] flex flex-col overflow-hidden">
       {/* Language Settings - Compact row with border */}
@@ -355,9 +594,9 @@ export default function SettingsPage() {
         </select>
       </div>
 
-      {/* Tabs: Watchlist | Hyperliquid Data | Binance Data */}
+      {/* Tabs: Watchlist | Hyperliquid Data | Binance Data | News Sources */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-        <TabsList className="grid w-full grid-cols-3 max-w-lg shrink-0">
+        <TabsList className="grid w-full grid-cols-4 max-w-3xl shrink-0">
           <TabsTrigger value="watchlist">{t('settings.watchlist', 'Watchlist')}</TabsTrigger>
           <TabsTrigger value="hyperliquid-data" className="flex items-center gap-1.5">
             <ExchangeIcon exchangeId="hyperliquid" size={16} />
@@ -367,6 +606,7 @@ export default function SettingsPage() {
             <ExchangeIcon exchangeId="binance" size={16} />
             Binance
           </TabsTrigger>
+          <TabsTrigger value="news-sources">{t('settings.newsSources', 'News Sources')}</TabsTrigger>
         </TabsList>
 
         {/* Watchlist Tab */}
@@ -763,6 +1003,283 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="news-sources" className="mt-4 flex-1 min-h-0 flex flex-col overflow-auto">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader className="shrink-0">
+                <CardTitle>{t('settings.newsSources', 'News Sources')}</CardTitle>
+                <CardDescription>
+                  {t('settings.newsSourcesDesc', 'Manage RSS sources and review collection health')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {newsLoading ? (
+                  <div className="text-muted-foreground text-sm">{t('common.loading', 'Loading...')}</div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.newsTotalArticles', 'Total Articles')}
+                        </div>
+                        <div className="text-xl font-semibold">{newsStats?.total_articles ?? 0}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.newsLast24h', 'New in 24h')}
+                        </div>
+                        <div className="text-xl font-semibold">{newsStats?.last_24h?.total ?? 0}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.newsEnabledSources', 'Enabled Sources')}
+                        </div>
+                        <div className="text-xl font-semibold">{enabledNewsSourceCount}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.newsLatestCollected', 'Latest Article')}
+                        </div>
+                        <div className="text-sm font-medium break-words">
+                          {formatDateTime(newsStats?.latest_article_at)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t space-y-3">
+                      <div className="text-sm font-medium">
+                        {t('settings.newsConfiguredSources', 'Configured Sources')}
+                      </div>
+                      {newsSources.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">
+                          {t('settings.newsNoSources', 'No news sources configured')}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {newsSources.map((source, index) => {
+                            const domain = extractDomain(source.url)
+                            const last24hCount = newsCountsByDomain[domain] ?? 0
+                            return (
+                              <div
+                                key={`${source.url}-${index}`}
+                                className="flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between"
+                              >
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                                      {domain}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {t('settings.newsCollected24h', '{{count}} in 24h', { count: last24hCount })}
+                                    </span>
+                                  </div>
+                                  <div className="truncate text-sm text-muted-foreground">
+                                    {source.url}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {t('settings.newsIntervalSeconds', 'Interval')}: {source.interval_seconds}s
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
+                                  <Input
+                                    type="number"
+                                    min={10}
+                                    className="w-24 h-8 text-xs"
+                                    value={source.interval_seconds}
+                                    onChange={(e) => handleNewsSourceIntervalChange(index, e.target.value)}
+                                  />
+                                  <span className="text-xs text-muted-foreground">
+                                    {source.enabled
+                                      ? t('settings.enabled', 'Enabled')
+                                      : t('settings.disabled', 'Disabled')}
+                                  </span>
+                                  <Switch
+                                    checked={source.enabled}
+                                    onCheckedChange={(checked) => handleToggleNewsSource(index, checked)}
+                                  />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+              <CardFooter className="border-t pt-3 flex items-center gap-3">
+                <Button
+                  size="sm"
+                  onClick={handleSaveNewsSources}
+                  disabled={newsLoading || newsSaving || !hasUnsavedNewsSources}
+                >
+                  {newsSaving ? t('common.saving', 'Saving...') : t('common.save', 'Save')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchNewsSourcesData}
+                  disabled={newsLoading || newsSaving}
+                >
+                  {t('common.refresh', 'Refresh')}
+                </Button>
+                {newsError && <span className="text-red-500 text-xs">{newsError}</span>}
+                {newsSuccess && <span className="text-green-500 text-xs">{newsSuccess}</span>}
+              </CardFooter>
+            </Card>
+
+            <Card>
+              <CardHeader className="shrink-0">
+                <CardTitle>{t('settings.addNewsSource', 'Add New Source')}</CardTitle>
+                <CardDescription>
+                  {t('settings.addNewsSourceDesc', 'Test an RSS feed before adding it to the source list')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground">{t('settings.newsSourceType', 'Source Type')}</div>
+                    <Select
+                      value={newsFormAdapter}
+                      onValueChange={(value: 'rss_generic' | 'cryptopanic' | 'finnhub_calendar') => {
+                        setNewsFormAdapter(value)
+                        setNewsTestResult(null)
+                        setNewsTestError(null)
+                      }}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="rss_generic">RSS / Atom</SelectItem>
+                        <SelectItem value="cryptopanic">CryptoPanic</SelectItem>
+                        <SelectItem value="finnhub_calendar">Finnhub Calendar</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground">{t('settings.newsIntervalSeconds', 'Interval')}</div>
+                    <Input
+                      type="number"
+                      min={10}
+                      value={newsFormInterval}
+                      onChange={(e) => {
+                        setNewsFormInterval(e.target.value)
+                        setNewsTestResult(null)
+                        setNewsTestError(null)
+                      }}
+                    />
+                  </div>
+                  {newsFormAdapter === 'cryptopanic' && (
+                    <div className="space-y-2 md:col-span-2">
+                      <div className="text-xs text-muted-foreground">{t('settings.newsAuthToken', 'Auth Token')}</div>
+                      <Input
+                        type="password"
+                        value={newsFormAuthToken}
+                        onChange={(e) => {
+                          setNewsFormAuthToken(e.target.value)
+                          setNewsTestResult(null)
+                          setNewsTestError(null)
+                        }}
+                      />
+                    </div>
+                  )}
+                  {newsFormAdapter === 'finnhub_calendar' && (
+                    <div className="space-y-2 md:col-span-2">
+                      <div className="text-xs text-muted-foreground">{t('settings.newsApiKey', 'API Key')}</div>
+                      <Input
+                        type="password"
+                        value={newsFormApiKey}
+                        onChange={(e) => {
+                          setNewsFormApiKey(e.target.value)
+                          setNewsTestResult(null)
+                          setNewsTestError(null)
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3 md:flex-row">
+                  <Input
+                    type="url"
+                    placeholder={t('settings.newsSourceUrlPlaceholder', 'https://example.com/rss')}
+                    value={newsTestUrl}
+                    onChange={(e) => {
+                      setNewsTestUrl(e.target.value)
+                      setNewsTestError(null)
+                      setNewsTestResult(null)
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleTestNewsSource}
+                    disabled={newsTesting}
+                  >
+                    {newsTesting ? t('settings.testing', 'Testing...') : t('settings.test', 'Test')}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleAddNewsSource}
+                    disabled={!newsTestResult?.success}
+                  >
+                    {t('settings.add', 'Add')}
+                  </Button>
+                </div>
+
+                {newsTestError && (
+                  <div className="text-sm text-red-500">{newsTestError}</div>
+                )}
+
+                {newsTestResult?.success && (
+                  <div className="rounded-lg border p-4 space-y-3">
+                    <div className="text-sm font-medium">
+                      {t('settings.newsSourceTestSuccess', 'Fetched {{count}} articles', {
+                        count: newsTestResult.total_fetched ?? newsTestResult.articles.length,
+                      })}
+                    </div>
+                    {newsTestResult.articles.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                          {t('settings.newsSampleTitles', 'Sample Titles')}
+                        </div>
+                        {newsTestResult.articles.slice(0, 5).map((article, index) => (
+                          <div key={`${article.source_url}-${index}`} className="text-sm">
+                            {article.title || article.source_url}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="rounded-md bg-muted/50 p-3 space-y-1">
+                      <div className="text-sm font-medium">
+                        {newsTestResult.validation?.schema_match
+                          ? t('settings.newsSchemaMatchYes', 'Schema validation passed')
+                          : t('settings.newsSchemaMatchNo', 'Schema validation found issues')}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {t('settings.newsSchemaValidationSummary', 'Valid {{valid}} / Invalid {{invalid}}', {
+                          valid: newsTestResult.validation?.valid_articles ?? 0,
+                          invalid: newsTestResult.validation?.invalid_articles ?? 0,
+                        })}
+                      </div>
+                      {!!newsTestResult.validation?.issues?.length && (
+                        <div className="space-y-1">
+                          {newsTestResult.validation.issues.slice(0, 5).map((issue, index) => (
+                            <div key={`${issue.source_url}-${index}`} className="text-xs text-amber-600">
+                              {issue.issues.join(', ')}: {issue.source_url}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
