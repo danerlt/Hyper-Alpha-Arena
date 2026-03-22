@@ -46,6 +46,49 @@ class TestSourceRequest(BaseModel):
     config: dict = {}
 
 
+class NewsArticleItem(BaseModel):
+    id: int
+    source_domain: str
+    source_url: str
+    title: str
+    summary: Optional[str] = None
+    published_at: Optional[str] = None
+    symbols: List[str] = []
+    sentiment: Optional[str] = None
+    ai_summary: Optional[str] = None
+    relevance_score: Optional[float] = None
+    image_url: Optional[str] = None
+
+
+class NewsArticleListResponse(BaseModel):
+    items: List[NewsArticleItem]
+    total: int
+
+
+def _parse_article_symbols(value) -> List[str]:
+    """Parse symbols stored as JSON text and fall back safely if malformed."""
+    if value is None:
+        return []
+
+    if isinstance(value, list):
+        return [str(v).upper() for v in value if str(v).strip()]
+
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return []
+
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = [part.strip() for part in raw.split(",")]
+
+        if isinstance(parsed, list):
+            return [str(v).upper() for v in parsed if str(v).strip()]
+
+    return []
+
+
 def _validate_test_item(item) -> List[str]:
     """Validate a normalized NewsItem against minimum NewsArticle requirements."""
     issues: List[str] = []
@@ -68,6 +111,65 @@ def _validate_test_item(item) -> List[str]:
 
 
 # ---- GET /api/news/sources ----
+
+@router.get("/articles", response_model=NewsArticleListResponse)
+def list_news_articles(
+    symbols: Optional[str] = None,
+    hours: int = 24,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    """List recent normalized news articles for watchlist/news display."""
+    hours = max(1, min(hours, 168))
+    limit = max(1, min(limit, 50))
+
+    symbol_filter = {
+        part.strip().upper()
+        for part in (symbols or "").split(",")
+        if part.strip()
+    }
+
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
+
+    # Pull a slightly larger recent window, then do defensive symbol filtering in Python
+    # because article symbols are stored as JSON text.
+    rows = db.query(NewsArticle).filter(
+        NewsArticle.published_at >= cutoff,
+    ).order_by(
+        NewsArticle.published_at.desc().nullslast(),
+        NewsArticle.id.desc(),
+    ).limit(limit * 5).all()
+
+    items: List[NewsArticleItem] = []
+
+    for article in rows:
+        article_symbols = _parse_article_symbols(article.symbols)
+        if symbol_filter and not (set(article_symbols) & symbol_filter or "_MACRO" in article_symbols):
+            continue
+
+        items.append(
+            NewsArticleItem(
+                id=article.id,
+                source_domain=article.source_domain,
+                source_url=article.source_url,
+                title=article.title,
+                summary=article.summary,
+                published_at=article.published_at.isoformat() if article.published_at else None,
+                symbols=article_symbols,
+                sentiment=article.sentiment,
+                ai_summary=article.ai_summary,
+                relevance_score=article.relevance_score,
+                image_url=article.image_url,
+            )
+        )
+
+        if len(items) >= limit:
+            break
+
+    return {
+        "items": items,
+        "total": len(items),
+    }
 
 @router.get("/sources")
 def get_news_sources(db: Session = Depends(get_db)):
@@ -182,6 +284,7 @@ def test_news_source(req: TestSourceRequest):
             ),
             "source_domain": item.source_domain,
             "source_url": item.source_url,
+            "image_url": item.image_url,
             "validation_issues": issues,
         })
 

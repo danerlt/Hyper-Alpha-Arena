@@ -1740,6 +1740,7 @@ class NewsArticle(Base):
     sentiment_source = Column(String(20), nullable=True)  # api/keyword/ai
     relevance_score = Column(Float, nullable=True)
     ai_summary = Column(Text, nullable=True)
+    image_url = Column(Text, nullable=True)  # Thumbnail/preview image URL from source
     raw_data = Column(Text, nullable=True)
     classified = Column(Boolean, nullable=False, default=False)
     fetched_at = Column(TIMESTAMP, server_default=func.current_timestamp())

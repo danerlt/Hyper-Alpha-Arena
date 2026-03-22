@@ -22,6 +22,7 @@ import HyperliquidMultiAccountSummary from '@/components/portfolio/HyperliquidMu
 import HyperliquidAssetChart, { TradeMarker } from './HyperliquidAssetChart'
 import ArenaView from '@/components/arena/ArenaView'
 import ViewToggle, { type ViewMode, getStoredViewMode } from '@/components/arena/ViewToggle'
+import DashboardInsightView from './DashboardInsightView'
 
 interface HyperliquidViewProps {
   wsRef?: React.MutableRefObject<WebSocket | null>
@@ -177,7 +178,7 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
               activitySignals={activitySignals}
             />
           </div>
-        ) : (
+        ) : viewMode === 'chart' ? (
           /* Chart Mode — existing chart + account summary */
           <>
             <div className="flex-1 min-h-[250px] md:min-h-[320px]">
@@ -206,6 +207,10 @@ export default function HyperliquidView({ wsRef, refreshKey = 0, onPageChange }:
               />
             </div>
           </>
+        ) : (
+          <div className="flex-1 min-h-[320px]">
+            <DashboardInsightView />
+          </div>
         )}
       </div>
 

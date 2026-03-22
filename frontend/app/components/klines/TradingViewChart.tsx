@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createChart, CandlestickSeries, HistogramSeries, LineSeries, AreaSeries } from 'lightweight-charts'
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries, AreaSeries, Time } from 'lightweight-charts'
 import PacmanLoader from '../ui/pacman-loader'
 import { formatChartTime, localToUtcTimestamp } from '../../lib/dateTime'
 
@@ -26,6 +26,26 @@ const formatMobilePrice = (price: number): string => {
   return price.toFixed(6)
 }
 
+function NewsMarkerIcon() {
+  return (
+    <svg viewBox="0 0 1024 1024" className="h-4 w-4" aria-hidden="true">
+      <path d="M891.61 99.61H134.8c-38.61 0-69.91 31.3-69.91 69.91v686.63c0 38.61 31.3 69.91 69.91 69.91h755.86c38.46-0.21 69.53-31.45 69.53-69.91V169.52c0.31-38.22-30.36-69.49-68.58-69.91zM801.65 353.8a6.843 6.843 0 0 0-2.81-4.54l-0.57 0.19a28.429 28.429 0 0 0-11.81-7.24l-25.91-7.43a92.073 92.073 0 0 1-36.57-16.19 42.275 42.275 0 0 1-15.24-32.19c0.13-8.37 2.71-16.52 7.43-23.43a42.253 42.253 0 0 1 19.05-16.19c10-3.67 20.59-5.48 31.24-5.33a66.48 66.48 0 0 1 45.52 13.14 49.519 49.519 0 0 1 16.19 34.67l-31.81 1.33a35.03 35.03 0 0 0-8.76-18.09 34.261 34.261 0 0 0-20.57-5.33c-7.85-0.4-15.64 1.45-22.48 5.33a11.211 11.211 0 0 0-5.33 9.71c0.23 3.66 1.78 7.12 4.38 9.71a83.424 83.424 0 0 0 29.34 10.67 112.25 112.25 0 0 1 34.86 12.57 51.901 51.901 0 0 1 18.09 16.19 47.466 47.466 0 0 1 6.29 25.9c0.06 9.22-2.67 18.25-7.81 25.91a51.607 51.607 0 0 1-21.53 18.1 95.52 95.52 0 0 1-34.67 6.29 66.086 66.086 0 0 1-46.48-14.1 62.856 62.856 0 0 1-19.05-41.14l31.24-2.48a38.133 38.133 0 0 0 11.81 23.43 31.633 31.633 0 0 0 23.43 7.24c8.31 0.73 16.61-1.5 23.43-6.29a19.05 19.05 0 0 0 7.81-15.24 6.808 6.808 0 0 0 1.29-5.17zM188.71 245.83h31.24l65.53 106.68V245.83h30.29v160.39h-32.39l-66.1-105.15v105.15h-28.76l0.19-160.39z m283.06 538.61H182.23V532.61h289.54v251.83zM350.62 406.03v-160.2h119.82v26.86h-87.82v35.62h80.77v26.86h-80.77v44h89.91l0.19 26.86h-122.1z m133.34-160.2h33.33l24.95 110.1L571 245.83h38.1l28.38 112.01 25.33-112.01H695l-39.6 160.39h-34.29l-31.05-120.39-31.81 120.39h-36.19l-38.1-160.39z m357.36 538.23H542.06V733.2h299.26v50.86z m0-100.2H542.06V633h299.26v50.86z m0-100.2H542.06V532.8h299.26v50.86z" fill="currentColor" />
+    </svg>
+  )
+}
+
+function FlowMarkerIcon({ direction }: { direction: 'up' | 'down' }) {
+  return (
+    <svg
+      viewBox="0 0 1024 1024"
+      className={`h-4 w-4 ${direction === 'down' ? 'rotate-180' : ''}`}
+      aria-hidden="true"
+    >
+      <path d="M325.792041 413.847539c13.659091 4.070712 34.55091 7.463995 53.009308-4.894473 19.48068-13.042037 9.767458-26.707268 5.070482-34.014698l-58.07979 38.909171z m89.650833-113.035426c-18.202571 12.195763-7.722892 26.163893-2.725065 32.915668l54.853306-36.736693c-9.339716-2.904143-32.30987-9.442046-52.128241 3.821025zM175.48985 502.548744c77.924767 41.337477 179.201381 56.837496 274.321786 47.628764l-22.681582-26.953886c-77.151148 5.025457-157.599388-8.572236-220.324988-41.85527-117.284193-62.213947-128.185474-168.897711-24.537859-238.310617 103.712083-69.470211 282.680151-75.320453 399.964344-13.109576 5.457292 2.888793 10.595312 5.910617 15.592117 8.981559v-8.425904c0-9.451256 3.096525-18.122753 8.179286-25.206078-62.179155-31.125905-137.997957-46.635133-213.523071-46.635133-5.904477 0-11.796674 0.350994-17.690918 0.537236l-0.98749 0.028652c-10.208503 0.350994-20.364817 0.977257-30.470989 1.862417-0.437975 0.037862-0.865717 0.079818-1.284249 0.127914-10.080589 0.926092-20.055778 2.105964-29.963429 3.590781-0.396019 0.054235-0.805342 0.124843-1.213641 0.191358-9.969049 1.511423-19.789719 3.26844-29.487592 5.335519-0.258896 0.048095-0.49528 0.10847-0.734734 0.168845-49.862641 10.6782-96.139617 28.480658-133.824914 53.695947l-0.096191 0.057305c-52.958142 35.497469-80.253812 79.323627-82.685187 123.482359-3.25923 56.715723 34.471093 113.980961 111.449301 154.807808z m282.056957-51.312666h140.266627V255.193123c-8.40646-6.019087-17.620309-11.745509-27.720341-17.10968-109.817128-58.06751-276.93224-52.587706-374.119723 12.249999-96.762811 65.054645-86.423325 164.581406 22.969131 222.920092 57.507762 30.350239 130.617873 43.165102 201.212698 39.36045-5.320169-11.294231-5.693676-24.668843-0.466628-36.401048 6.751774-15.171538 21.612227-24.976858 37.858236-24.976858z m-165.54536-11.623735l-15.116279 10.125615c-5.738701 3.840468-7.818059 3.849678-14.601556 0.261966l-2.109034-1.121544-5.53097-2.935865c-6.846942-3.629667-7.067976-4.876054-1.335415-8.713452l15.122419-10.125615c-12.853749-6.815219-58.310034-40.264029-48.223305-47.015803 1.019213-0.689708 1.019213-0.689708 3.763721-1.597381l39.289841-13.099343c0.977257-0.303922 4.569062-0.859577 6.128581-0.041956 2.309602 1.230014 14.566764 23.528879 35.446303 37.379329l65.8825-44.1178c-14.137998-18.368346-46.01808-49.433876-1.671059-79.138408 49.462528-33.126468 112.933095-16.368806 131.116223-7.549953l16.483416-11.042497c5.699816-3.834328 7.894807-3.900843 14.697747-0.28448l7.732102 4.090155c6.715959 3.565199 6.846942 4.876054 1.127683 8.70015l-16.489556 11.042497c10.428513 6.351662 51.670823 37.055964 40.223097 44.724621-1.357927 0.927115-2.76702 1.406023-4.920056 1.901302l-34.606169 9.032724c-2.37714 0.779759-4.565992 0.859577-6.118348 0.028653-2.309602-1.226944-13.44522-23.339568-29.880541-32.05302l-62.204737 41.660842c13.981433 20.330024 41.36306 52.197826-1.699712 81.033571-46.715975 31.30089-103.627149 19.660782-132.506896 8.855692z m104.58394 157.11434c-88.205924 0-173.72874-19.6045-240.83102-55.187926-37.925774-20.125363-68.693522-44.922119-91.317799-72.675206 4.981455 50.529837 42.389436 100.025111 111.047142 136.435368 63.495126 33.704636 142.535297 50.27401 221.092467 50.274011 44.041052 0 87.912236-5.255701 128.831181-15.585977l-41.788755-49.650817c-28.074406 4.185322-57.20384 6.390547-87.033216 6.390547zM64.448848 571.871599c4.974291 50.526767 42.388413 100.021018 111.041002 136.445602 63.502289 33.682124 142.541437 50.2648 221.095537 50.2648 69.473281 0 138.51882-13.013385 196.183148-38.5899l-36.033681-42.800805c-49.075719 14.729469-103.395882 22.531156-160.149467 22.531156-88.205924 0-173.72874-19.6045-240.824881-55.187926-37.925774-20.126386-68.693522-44.920072-91.311658-72.662927z m332.136539 230.849692c-88.205924 0-173.72874-19.60757-240.83102-55.19202-37.925774-20.122293-68.693522-44.909839-91.317799-72.672136 4.981455 50.529837 42.389436 100.025111 111.047142 136.445602 63.495126 33.682124 142.535297 50.27401 221.092467 50.27401 90.685395 0 180.709735-22.094204 245.534136-65.479317l0.134053-0.079818a270.50383 270.50383 0 0 0 9.127892-6.390547l-29.237905-34.743292c-63.859423 31.057343-142.100392 47.837518-225.548966 47.837518z m380.007827-303.217906V236.025575H655.468552v263.47781H473.554386l242.479567 288.047392 242.444774-288.047392H776.593214z" fill="currentColor" />
+    </svg>
+  )
+}
+
 interface TradingViewChartProps {
   symbol: string
   period: string
@@ -38,6 +58,24 @@ interface TradingViewChartProps {
   onLoadMore?: () => void
   onDataUpdate?: (klines: any[], indicators: any) => void
   onIndicatorLoadingChange?: (loading: boolean) => void
+  showVolumePane?: boolean
+  eventMarkers?: Array<{
+    id?: string
+    kind?: 'news' | 'flow'
+    time: number
+    position: 'aboveBar' | 'belowBar'
+    color: string
+    shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown'
+    text?: string
+    title?: string
+    summary?: string
+    tone?: 'bullish' | 'bearish' | 'mixed'
+    metadata?: string[]
+    iconVariant?: 'news' | 'flow-up' | 'flow-down'
+  }>
+  activeEventMarkerId?: string
+  onEventMarkerClick?: (eventId: string) => void
+  incrementalRefreshToken?: number
 }
 
 type ChartType = 'candlestick' | 'line' | 'area'
@@ -53,7 +91,12 @@ export default function TradingViewChart({
   data = [],
   onLoadMore,
   onDataUpdate,
-  onIndicatorLoadingChange
+  onIndicatorLoadingChange,
+  showVolumePane = true,
+  eventMarkers = [],
+  activeEventMarkerId,
+  onEventMarkerClick,
+  incrementalRefreshToken = 0,
 }: TradingViewChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<any>(null)
@@ -102,6 +145,21 @@ export default function TradingViewChart({
   // Pane position tracking for selector placement
   const [indicatorPaneTop, setIndicatorPaneTop] = useState<number | null>(null)
   const [flowPaneTop, setFlowPaneTop] = useState<number | null>(null)
+  const [hoveredMarker, setHoveredMarker] = useState<{
+    x: number
+    y: number
+    marker: any
+  } | null>(null)
+  const [hoveredCandleTime, setHoveredCandleTime] = useState<number | null>(null)
+  const [hoveredMarkerCandleTime, setHoveredMarkerCandleTime] = useState<number | null>(null)
+  const [overlayMarkers, setOverlayMarkers] = useState<Array<{
+    key: string
+    x: number
+    y: number
+    marker: any
+  }>>([])
+  const [viewportVersion, setViewportVersion] = useState(0)
+  const lastIncrementalRefreshRef = useRef(0)
 
   // Market Flow indicator colors
   const FLOW_COLORS: Record<string, { up: string; down: string; line: string }> = {
@@ -123,6 +181,8 @@ export default function TradingViewChart({
     depth_ratio: 'Depth Ratio (log)',
     order_imbalance: 'Order Imbalance'
   }
+
+  const bumpViewportVersion = () => setViewportVersion(v => v + 1)
 
   // 检测是否需要重新初始化图表（子图结构变化）
   const needsChartReinit = (prevIndicators: string[], newIndicators: string[]) => {
@@ -319,9 +379,10 @@ export default function TradingViewChart({
         },
       })
 
-      // 创建Volume Panel
-      const volumePane = chart.addPane()
-      volumePane.attachPrimitive(createPaneLabel('Volume'))
+      const volumePane = showVolumePane ? chart.addPane() : null
+      if (volumePane) {
+        volumePane.attachPrimitive(createPaneLabel('Volume'))
+      }
 
       // 创建指标Panel（如果需要）
       let indicatorPane = null
@@ -335,27 +396,28 @@ export default function TradingViewChart({
       }
 
       // 设置Panel高度比例
-      if (needsSubplot) {
+      if (needsSubplot && volumePane) {
         // 三层布局：主图60% + Volume20% + 指标20%
         chart.panes()[0].setStretchFactor(3)  // 主图 60% (3/5)
         volumePane.setStretchFactor(1)        // Volume 20% (1/5)
         indicatorPane.setStretchFactor(1)     // 指标 20% (1/5)
+      } else if (needsSubplot && !volumePane) {
+        chart.panes()[0].setStretchFactor(4)
+        indicatorPane.setStretchFactor(1)
       } else {
-        // 两层布局：主图80% + Volume20%
-        chart.panes()[0].setStretchFactor(4)  // 主图 80% (4/5)
-        volumePane.setStretchFactor(1)        // Volume 20% (1/5)
+        chart.panes()[0].setStretchFactor(1)
       }
 
       // 在主Panel创建主图表系列
       const mainSeries = createMainSeries(chart, chartType)
 
       // 在Volume Panel创建成交量系列
-      const volumeSeries = volumePane.addSeries(HistogramSeries, {
+      const volumeSeries = volumePane ? volumePane.addSeries(HistogramSeries, {
         color: '#6b7280',
         priceFormat: {
           type: 'volume',
         },
-      })
+      }) : null
 
 
       // 创建移动平均线系列
@@ -496,7 +558,13 @@ export default function TradingViewChart({
       atrSeriesRef.current = atrSeries
       stochSeriesRef.current = stochSeries
       obvSeriesRef.current = obvSeries
-
+      chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+        bumpViewportVersion()
+      })
+      chart.subscribeCrosshairMove((param: any) => {
+        const time = typeof param?.time === 'number' ? param.time : null
+        setHoveredCandleTime(time)
+      })
       // 监听容器大小变化
       let resizeTimeout: NodeJS.Timeout
       const resizeObserver = new ResizeObserver(entries => {
@@ -507,6 +575,7 @@ export default function TradingViewChart({
             if (chartRef.current && width > 0 && height > 0) {
               chartRef.current.applyOptions({ width, height })
               updatePanePositions()
+              bumpViewportVersion()
             }
           }
         }, 100)
@@ -514,7 +583,10 @@ export default function TradingViewChart({
       resizeObserver.observe(container)
 
       // Initial pane position calculation
-      setTimeout(() => updatePanePositions(), 50)
+      setTimeout(() => {
+        updatePanePositions()
+        bumpViewportVersion()
+      }, 50)
 
       return () => {
         clearTimeout(resizeTimeout)
@@ -557,7 +629,86 @@ export default function TradingViewChart({
     } catch (error) {
       console.error('Chart initialization failed:', error)
     }
-  }, [chartType])
+  }, [chartType, showVolumePane])
+
+  useEffect(() => {
+    if (!chartRef.current || !seriesRef.current || !chartData.length || !chartContainerRef.current) {
+      setOverlayMarkers([])
+      return
+    }
+
+    const findNearestPoint = (chartTime: number) => {
+      let best = chartData[0]
+      let bestDiff = Math.abs(chartData[0].time - chartTime)
+      for (let i = 1; i < chartData.length; i += 1) {
+        const diff = Math.abs(chartData[i].time - chartTime)
+        if (diff < bestDiff) {
+          best = chartData[i]
+          bestDiff = diff
+        }
+      }
+      return best
+    }
+
+    const nextMarkers: Array<{ key: string; x: number; y: number; marker: any }> = []
+    const grouped = new Map<string, Array<{ marker: any; candle: any; position: string }>>()
+
+    for (const marker of eventMarkers) {
+      const chartTime = formatChartTime(marker.time / 1000) as number
+      const candle = findNearestPoint(chartTime)
+      const key = `${candle.time}:${marker.position}`
+      const existing = grouped.get(key) || []
+      existing.push({ marker, candle, position: marker.position })
+      grouped.set(key, existing)
+    }
+
+    grouped.forEach((entries, groupKey) => {
+      const [candleTimeRaw] = groupKey.split(':')
+      const candle = entries[0]?.candle
+      if (!candle) return
+      const x = chartRef.current.timeScale().timeToCoordinate(candle.time as Time)
+      if (x === null || x === undefined) return
+      const containerWidth = chartContainerRef.current?.clientWidth || 0
+      const containerHeight = chartContainerRef.current?.clientHeight || 0
+      const safeLeft = 16
+      const safeRight = Math.max(safeLeft + 1, containerWidth - 92)
+      if (x < safeLeft) return
+
+      const sorted = [...entries].sort((a, b) => a.marker.time - b.marker.time)
+      sorted.forEach(({ marker }, index) => {
+        const row = index % 3
+        const column = Math.floor(index / 3)
+        const xOffset = column === 0 ? 0 : (column % 2 === 1 ? column * 7 : -column * 7)
+        const baseY = seriesRef.current.priceToCoordinate(candle.low)
+        if (baseY === null || baseY === undefined) return
+        const y = Math.min(baseY + 22 + row * 12, Math.max(48, containerHeight - 36))
+        nextMarkers.push({
+          key: marker.id || `${marker.kind || 'event'}-${marker.time}-${index}`,
+          x: Math.min(Math.max(x + xOffset, safeLeft), safeRight),
+          y,
+          marker: {
+            ...marker,
+            chartTime: Number(candleTimeRaw),
+          },
+        })
+      })
+    })
+
+    setOverlayMarkers(nextMarkers)
+  }, [chartData, eventMarkers, viewportVersion])
+
+  useEffect(() => {
+    if (!activeEventMarkerId || !overlayMarkers.length) return
+
+    const activeMarker = overlayMarkers.find(item => item.marker.id === activeEventMarkerId)
+    if (!activeMarker) return
+
+    setHoveredMarker({
+      x: activeMarker.x,
+      y: activeMarker.y,
+      marker: activeMarker.marker,
+    })
+  }, [activeEventMarkerId, overlayMarkers])
 
   // 动态管理子图Pane - 只在子图结构变化时重新初始化
   useEffect(() => {
@@ -642,9 +793,10 @@ export default function TradingViewChart({
           },
         })
 
-        // 创建Volume Panel
-        const volumePane = chart.addPane()
-        volumePane.attachPrimitive(createPaneLabel('Volume'))
+        const volumePane = showVolumePane ? chart.addPane() : null
+        if (volumePane) {
+          volumePane.attachPrimitive(createPaneLabel('Volume'))
+        }
 
         // 创建指标Panel（如果需要）
         let indicatorPane = null
@@ -657,21 +809,23 @@ export default function TradingViewChart({
         }
 
         // 设置Panel高度比例
-        if (needsSubplot) {
+        if (needsSubplot && volumePane) {
           chart.panes()[0].setStretchFactor(3)
           volumePane.setStretchFactor(1)
           indicatorPane.setStretchFactor(1)
-        } else {
+        } else if (needsSubplot && !volumePane) {
           chart.panes()[0].setStretchFactor(4)
-          volumePane.setStretchFactor(1)
+          indicatorPane.setStretchFactor(1)
+        } else {
+          chart.panes()[0].setStretchFactor(1)
         }
 
         // 重新创建所有系列
         const mainSeries = createMainSeries(chart, chartType)
-        const volumeSeries = volumePane.addSeries(HistogramSeries, {
+        const volumeSeries = volumePane ? volumePane.addSeries(HistogramSeries, {
           color: '#6b7280',
           priceFormat: { type: 'volume' },
-        })
+        }) : null
 
         // 创建移动平均线系列
         const ma5Series = chart.addSeries(LineSeries, { color: '#ff6b6b', lineWidth: 1, visible: false })
@@ -724,7 +878,9 @@ export default function TradingViewChart({
         atrSeriesRef.current = atrSeries
         stochSeriesRef.current = stochSeries
         obvSeriesRef.current = obvSeries
-
+        chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+          bumpViewportVersion()
+        })
         // 重新应用数据
         const resolvedActiveSubplot = (activeSubplot && subplotIndicators.includes(activeSubplot))
           ? activeSubplot
@@ -739,7 +895,7 @@ export default function TradingViewChart({
           }))
 
           mainSeries.setData(mainData)
-          volumeSeries.setData(volumeData)
+          if (volumeSeries) volumeSeries.setData(volumeData)
 
           // 重新应用移动平均线数据
           const ma5Data = calculateMA(currentChartData, 5)
@@ -1005,7 +1161,7 @@ export default function TradingViewChart({
       ? activeSubplot
       : subplotIndicators[0]
 
-    if (seriesRef.current && volumeSeriesRef.current && chartData.length > 0) {
+    if (seriesRef.current && chartData.length > 0) {
       // 转换主图数据
       const mainData = convertDataForSeries(chartData, chartType)
 
@@ -1023,7 +1179,9 @@ export default function TradingViewChart({
 
       // 确保数据完全替换，避免重合
       seriesRef.current.setData(mainData)
-      volumeSeriesRef.current.setData(volumeData)
+      if (volumeSeriesRef.current) {
+        volumeSeriesRef.current.setData(volumeData)
+      }
 
       if (ma5SeriesRef.current) ma5SeriesRef.current.setData(ma5Data)
       if (ma10SeriesRef.current) ma10SeriesRef.current.setData(ma10Data)
@@ -1442,17 +1600,20 @@ export default function TradingViewChart({
   }
 
   // 获取K线数据和指标
-  const fetchKlineData = async (forceAllIndicators = false) => {
+  const fetchKlineData = async (forceAllIndicators = false, incremental = false) => {
     if (loading) return
 
-    setLoading(true)
-    onIndicatorLoadingChange?.(true)
-    onLoadingChange(true)
+    if (!incremental) {
+      setLoading(true)
+      onIndicatorLoadingChange?.(true)
+      onLoadingChange(true)
+    }
     try {
       // 始终请求当前选中的指标，避免缓存缺失
       const indicatorsToFetch = selectedIndicators
       const indicatorsParam = indicatorsToFetch.length > 0 ? `&indicators=${indicatorsToFetch.join(',')}` : ''
-      const response = await fetch(`/api/market/kline-with-indicators/${symbol}?market=${exchange}&period=${period}&count=500${indicatorsParam}`)
+      const count = incremental ? 500 : 500
+      const response = await fetch(`/api/market/kline-with-indicators/${symbol}?market=${exchange}&period=${period}&count=${count}${indicatorsParam}`)
       const result = await response.json()
 
       if (result.klines && result.klines.length > 0) {
@@ -1465,7 +1626,15 @@ export default function TradingViewChart({
           volume: item.volume || 0,
         }))
 
-        setChartData(newChartData)
+        const mergedChartData = !incremental || chartData.length === 0
+          ? newChartData
+          : Array.from(
+              new Map(
+                [...chartData, ...newChartData].map(item => [item.time, item])
+              ).values()
+            ).sort((a, b) => a.time - b.time)
+
+        setChartData(mergedChartData)
 
         // 合并新获取的指标数据
         if (result.indicators) {
@@ -1475,7 +1644,7 @@ export default function TradingViewChart({
 
         // 通知父组件最新数据，用于 AI 分析启用按钮
         if (onDataUpdate) {
-          onDataUpdate(newChartData, result.indicators || {})
+          onDataUpdate(mergedChartData, result.indicators || {})
         }
 
         setHasData(true)
@@ -1486,9 +1655,11 @@ export default function TradingViewChart({
       console.error('Failed to fetch kline data:', error)
       setHasData(false)
     } finally {
-      setLoading(false)
-      onLoadingChange(false)
-      onIndicatorLoadingChange?.(false)
+      if (!incremental) {
+        setLoading(false)
+        onLoadingChange(false)
+        onIndicatorLoadingChange?.(false)
+      }
     }
   }
 
@@ -1540,16 +1711,23 @@ export default function TradingViewChart({
     }
   }, [selectedIndicators])
 
+  useEffect(() => {
+    if (!symbol || !period || incrementalRefreshToken <= 0) return
+
+    const now = Date.now()
+    if (now - lastIncrementalRefreshRef.current < 1500) return
+    lastIncrementalRefreshRef.current = now
+    fetchKlineData(false, true)
+  }, [incrementalRefreshToken])
+
   // Handle market flow indicator changes - similar to technical indicators
   useEffect(() => {
     if (!chartRef.current) {
-      console.log('[FlowPane] No chart ref, skipping')
       return
     }
 
     const chart = chartRef.current
     const hasFlowIndicators = selectedFlowIndicators.length > 0
-    console.log('[FlowPane] hasFlowIndicators:', hasFlowIndicators, 'flowPaneRef:', !!flowPaneRef.current)
 
     if (hasFlowIndicators) {
       // Create flow pane if not exists
@@ -1623,12 +1801,10 @@ export default function TradingViewChart({
 
     } else {
       // Remove flow pane if no indicators selected
-      console.log('[FlowPane] Removing pane, flowPaneRef:', !!flowPaneRef.current)
       if (flowPaneRef.current) {
         // Find the pane index before clearing refs
         const panes = chart.panes()
         const paneIndex = panes.indexOf(flowPaneRef.current)
-        console.log('[FlowPane] Pane index:', paneIndex, 'Total panes:', panes.length)
 
         // Clear refs first to prevent any further operations
         flowPaneRef.current = null
@@ -1645,13 +1821,11 @@ export default function TradingViewChart({
         // Now remove the pane by index (removePane takes index, not pane object)
         if (paneIndex > 0) {
           try {
-            console.log('[FlowPane] Calling chart.removePane with index:', paneIndex)
             chart.removePane(paneIndex)
-            console.log('[FlowPane] removePane succeeded')
             // Update pane positions after flow pane removed
             updatePanePositions()
           } catch (e) {
-            console.warn('[FlowPane] Failed to remove flow pane:', e)
+            console.warn('Failed to remove flow pane:', e)
           }
         }
         setActiveFlowIndicator(null)
@@ -1702,11 +1876,101 @@ export default function TradingViewChart({
   }, [symbol, period, exchange, chartData.length])
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative h-full w-full overflow-hidden">
 
 
       {/* 图表容器 - 铺满父元素 */}
       <div ref={chartContainerRef} className="w-full h-full" />
+
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        {overlayMarkers.map((item) => (
+          (() => {
+            const isCandleActive = (hoveredMarkerCandleTime ?? hoveredCandleTime) === item.marker.chartTime
+            const isSelected = activeEventMarkerId === item.marker.id
+            const scaleClass = isSelected
+              ? 'scale-[1.2]'
+              : isCandleActive
+                ? 'scale-110'
+                : 'scale-100'
+            const opacityClass = isCandleActive ? 'opacity-100' : 'opacity-35'
+            return (
+          <button
+            key={item.key}
+            type="button"
+            className={`pointer-events-auto absolute z-10 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border bg-background/90 shadow-sm backdrop-blur-sm transition-all duration-150 ${
+              item.marker.iconVariant === 'news'
+                ? 'border-blue-200 text-blue-700'
+                : item.marker.iconVariant === 'flow-down'
+                  ? 'border-red-200 text-red-600'
+                  : 'border-emerald-200 text-emerald-600'
+            } ${isSelected ? 'ring-2 ring-sky-300/70 ring-offset-1 ring-offset-background' : ''} ${scaleClass} ${opacityClass}`}
+            style={{ left: item.x, top: item.y }}
+            onMouseEnter={() => {
+              setHoveredMarker({ x: item.x, y: item.y, marker: item.marker })
+              setHoveredMarkerCandleTime(item.marker.chartTime ?? null)
+            }}
+            onMouseLeave={() => {
+              setHoveredMarker(null)
+              setHoveredMarkerCandleTime(null)
+            }}
+            onClick={() => {
+              if (item.marker.id) onEventMarkerClick?.(item.marker.id)
+              setHoveredMarker({ x: item.x, y: item.y, marker: item.marker })
+              setHoveredMarkerCandleTime(item.marker.chartTime ?? null)
+            }}
+          >
+            {item.marker.iconVariant === 'news' ? (
+              <NewsMarkerIcon />
+            ) : (
+              <FlowMarkerIcon direction={item.marker.iconVariant === 'flow-down' ? 'down' : 'up'} />
+            )}
+          </button>
+            )
+          })()
+        ))}
+      </div>
+
+      {hoveredMarker && (
+        <div
+          className="pointer-events-none absolute z-20 w-64 rounded-xl border border-border bg-background/95 p-3 shadow-xl backdrop-blur-sm"
+          style={{
+            left: Math.min(Math.max(hoveredMarker.x + 16, 12), (chartContainerRef.current?.clientWidth || 320) - 272),
+            top: Math.min(Math.max(hoveredMarker.y + 16, 12), (chartContainerRef.current?.clientHeight || 240) - 140),
+          }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-semibold text-foreground">{hoveredMarker.marker.title || hoveredMarker.marker.kind || 'Event'}</div>
+            {hoveredMarker.marker.tone && (
+              <div className={`text-[10px] uppercase tracking-[0.2em] ${
+                hoveredMarker.marker.tone === 'bullish'
+                  ? 'text-emerald-600'
+                  : hoveredMarker.marker.tone === 'bearish'
+                    ? 'text-orange-600'
+                    : 'text-slate-500'
+              }`}>
+                {hoveredMarker.marker.tone}
+              </div>
+            )}
+          </div>
+          {hoveredMarker.marker.summary && (
+            <div className="mt-1 text-xs leading-5 text-muted-foreground">
+              {hoveredMarker.marker.summary}
+            </div>
+          )}
+          <div className="mt-2 text-[11px] text-muted-foreground">
+            {new Date(hoveredMarker.marker.time).toLocaleString()}
+          </div>
+          {Array.isArray(hoveredMarker.marker.metadata) && hoveredMarker.marker.metadata.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {hoveredMarker.marker.metadata.slice(0, 3).map((item: string, index: number) => (
+                <span key={`${hoveredMarker.marker.id || hoveredMarker.marker.time}-${index}`} className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {item}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
 
       {/* 指标子图切换器 - positioned at indicator pane top-left */}

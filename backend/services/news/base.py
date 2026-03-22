@@ -24,6 +24,7 @@ class NewsItem:
     symbols: List[str] = field(default_factory=list)
     sentiment: Optional[str] = None        # bullish/bearish/neutral
     sentiment_source: Optional[str] = None  # api/keyword/ai
+    image_url: Optional[str] = None         # Thumbnail/preview image URL
     raw_data: Optional[str] = None
 
     def __post_init__(self):

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Workstation from './Workstation'
+import NewsZone from './NewsZone'
 import type { CharacterState } from './pixelData/characters'
 import type { PlacedAsset, SceneConfig } from './SceneEditor'
-import { STORAGE_KEY, CANVAS_W, CANVAS_H, getWsArea, normalizeSceneConfig, shouldUseOfficialConfig } from './SceneEditor'
+import { STORAGE_KEY, CANVAS_W, CANVAS_H, getWsArea, getNewsArea, normalizeSceneConfig, shouldUseOfficialConfig } from './SceneEditor'
 import { OFFICIAL_SCENE_CONFIG } from './officialSceneConfig'
 
 export interface MonitorPosition {
@@ -113,7 +114,17 @@ function VirtualCanvas({ traders, sceneConfig, canvasW, canvasH, wsVisualH }: {
   canvasW: number; canvasH: number; wsVisualH: number
 }) {
   const ws = getWsArea(sceneConfig)
+  const na = getNewsArea(sceneConfig)
   const animMap = sceneConfig?.animationMap
+
+  // Collect preset IDs already bound to traders
+  const boundPresetIds = useMemo(() => {
+    const ids = new Set<number>()
+    for (const t of traders) {
+      if (t.avatarPresetId) ids.add(t.avatarPresetId)
+    }
+    return ids
+  }, [traders])
   return (
     <div className="relative" style={{ width: canvasW, height: canvasH }}>
       {/* Office wall */}
@@ -176,6 +187,25 @@ function VirtualCanvas({ traders, sceneConfig, canvasW, canvasH, wsVisualH }: {
               activitySignal={trader.activitySignal}
             />
           ))}
+        </div>
+      </div>
+
+      {/* News Zone — idle characters watching screens */}
+      <div className="absolute z-10" style={{
+        left: na.x, top: na.y, width: na.w, height: na.h,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          transform: `scale(${na.scale})`, transformOrigin: 'top left',
+          width: na.w / na.scale, height: na.h / na.scale,
+        }}>
+          <NewsZone
+            areaW={na.w}
+            areaH={na.h}
+            scale={na.scale}
+            boundTraderPresetIds={boundPresetIds}
+            animationMap={animMap}
+          />
         </div>
       </div>
     </div>

@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 
 from hyperliquid.info import Info
 
+from services.large_order_threshold_tracker import LargeOrderThresholdTracker
+
 logger = logging.getLogger(__name__)
 
 # Aggregation window in seconds
@@ -45,6 +47,10 @@ class TradeBuffer:
     taker_sell_count: int = 0
     taker_buy_notional: Decimal = Decimal("0")
     taker_sell_notional: Decimal = Decimal("0")
+    large_buy_notional: Decimal = Decimal("0")
+    large_sell_notional: Decimal = Decimal("0")
+    large_buy_count: int = 0
+    large_sell_count: int = 0
     high_price: Optional[Decimal] = None
     low_price: Optional[Decimal] = None
     total_volume: Decimal = Decimal("0")
@@ -58,6 +64,10 @@ class TradeBuffer:
         self.taker_sell_count = 0
         self.taker_buy_notional = Decimal("0")
         self.taker_sell_notional = Decimal("0")
+        self.large_buy_notional = Decimal("0")
+        self.large_sell_notional = Decimal("0")
+        self.large_buy_count = 0
+        self.large_sell_count = 0
         self.high_price = None
         self.low_price = None
         self.total_volume = Decimal("0")
@@ -121,6 +131,7 @@ class MarketFlowCollector:
 
         # Thread safety
         self.buffer_lock = threading.Lock()
+        self.large_order_tracker = LargeOrderThresholdTracker(exchange="hyperliquid")
 
         logger.info("MarketFlowCollector initialized")
 
@@ -142,6 +153,7 @@ class MarketFlowCollector:
         # Store symbols for retry
         self._pending_symbols = symbols
         self.reconnect_attempts = 0
+        self.large_order_tracker.initialize_from_history(symbols)
 
         # Try to start with retry logic
         self._start_with_retry()
@@ -281,6 +293,7 @@ class MarketFlowCollector:
         try:
             # Initialize buffer (use original symbol for internal tracking)
             self.trade_buffers[symbol] = TradeBuffer()
+            self.large_order_tracker.ensure_symbols([symbol])
 
             # Subscribe to trades
             trades_id = self.info.subscribe(
@@ -362,16 +375,27 @@ class MarketFlowCollector:
                     size = Decimal(str(trade["sz"]))
                     side = trade["side"]  # "A" = taker sell, "B" = taker buy
                     notional = price * size
+                    notional_float = float(notional)
+                    # Classify before updating the tracker so the current trade
+                    # does not immediately move its own threshold.
+                    is_large = self.large_order_tracker.is_large_order(symbol, notional_float)
+                    self.large_order_tracker.update(symbol, notional_float)
 
                     # Update buffer
                     if side == "B":  # Taker buy
                         buffer.taker_buy_volume += size
                         buffer.taker_buy_count += 1
                         buffer.taker_buy_notional += notional
+                        if is_large:
+                            buffer.large_buy_notional += notional
+                            buffer.large_buy_count += 1
                     else:  # Taker sell (side == "A")
                         buffer.taker_sell_volume += size
                         buffer.taker_sell_count += 1
                         buffer.taker_sell_notional += notional
+                        if is_large:
+                            buffer.large_sell_notional += notional
+                            buffer.large_sell_count += 1
 
                     buffer.total_volume += size
                     buffer.total_notional += notional
@@ -703,6 +727,10 @@ class MarketFlowCollector:
                 taker_sell_count=buffer.taker_sell_count,
                 taker_buy_notional=buffer.taker_buy_notional,
                 taker_sell_notional=buffer.taker_sell_notional,
+                large_buy_notional=buffer.large_buy_notional,
+                large_sell_notional=buffer.large_sell_notional,
+                large_buy_count=buffer.large_buy_count,
+                large_sell_count=buffer.large_sell_count,
                 vwap=vwap, high_price=buffer.high_price, low_price=buffer.low_price,
             )
             update_cols = {k: v for k, v in values.items() if k not in ("exchange", "symbol", "timestamp")}

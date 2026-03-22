@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 
-export type ViewMode = 'arena' | 'chart'
+export type ViewMode = 'arena' | 'chart' | 'insight'
 
 const STORAGE_KEY = 'arena_view_mode'
 
@@ -12,7 +12,7 @@ interface ViewToggleProps {
 export function getStoredViewMode(): ViewMode {
   if (typeof window === 'undefined') return 'arena'
   const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored === 'arena' || stored === 'chart') return stored
+  if (stored === 'arena' || stored === 'chart' || stored === 'insight') return stored
   return 'chart'
 }
 
@@ -50,6 +50,16 @@ export default function ViewToggle({ mode, onChange }: ViewToggleProps) {
         }`}
       >
         {t('arena.viewToggle.chart', 'Chart')}
+      </button>
+      <button
+        onClick={() => handleToggle('insight')}
+        className={`px-3 py-1 rounded-md transition-colors ${
+          mode === 'insight'
+            ? 'bg-background text-foreground shadow-sm font-medium'
+            : 'text-muted-foreground hover:text-foreground'
+        }`}
+      >
+        {t('arena.viewToggle.insight', 'Insight')}
       </button>
     </div>
   )

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 from database.connection import SessionLocal
 from database.models import MarketTradesAggregated
+from services.large_order_threshold_tracker import LargeOrderThresholdTracker
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,10 @@ class TradeBuffer:
     taker_sell_count: int = 0
     taker_buy_notional: Decimal = Decimal("0")
     taker_sell_notional: Decimal = Decimal("0")
+    large_buy_notional: Decimal = Decimal("0")
+    large_sell_notional: Decimal = Decimal("0")
+    large_buy_count: int = 0
+    large_sell_count: int = 0
     high_price: Optional[Decimal] = None
     low_price: Optional[Decimal] = None
 
@@ -50,6 +55,10 @@ class TradeBuffer:
         self.taker_sell_count = 0
         self.taker_buy_notional = Decimal("0")
         self.taker_sell_notional = Decimal("0")
+        self.large_buy_notional = Decimal("0")
+        self.large_sell_notional = Decimal("0")
+        self.large_buy_count = 0
+        self.large_sell_count = 0
         self.high_price = None
         self.low_price = None
 
@@ -85,6 +94,7 @@ class BinanceWSCollector:
         self.flush_timer: Optional[threading.Timer] = None
         self.ws_thread: Optional[threading.Thread] = None
         self.buffer_lock = threading.Lock()
+        self.large_order_tracker = LargeOrderThresholdTracker(exchange="binance")
 
         logger.info("BinanceWSCollector initialized")
 
@@ -101,6 +111,7 @@ class BinanceWSCollector:
 
         self.symbols = symbols
         self.trade_buffers = {s: TradeBuffer() for s in symbols}
+        self.large_order_tracker.initialize_from_history(symbols)
         self.running = True
 
         # Start WebSocket thread
@@ -222,16 +233,27 @@ class BinanceWSCollector:
 
                 with self.buffer_lock:
                     buffer = self.trade_buffers[symbol]
+                    notional_float = float(notional)
+                    # Keep runtime work constant-time; threshold warm-start is
+                    # approximate and live trades refine it after startup.
+                    is_large = self.large_order_tracker.is_large_order(symbol, notional_float)
+                    self.large_order_tracker.update(symbol, notional_float)
                     if is_buyer_maker:
                         # Buyer is maker = Taker is seller
                         buffer.taker_sell_volume += qty
                         buffer.taker_sell_notional += notional
                         buffer.taker_sell_count += 1
+                        if is_large:
+                            buffer.large_sell_notional += notional
+                            buffer.large_sell_count += 1
                     else:
                         # Seller is maker = Taker is buyer
                         buffer.taker_buy_volume += qty
                         buffer.taker_buy_notional += notional
                         buffer.taker_buy_count += 1
+                        if is_large:
+                            buffer.large_buy_notional += notional
+                            buffer.large_buy_count += 1
 
                     # Track high/low
                     if buffer.high_price is None or price > buffer.high_price:
@@ -290,6 +312,10 @@ class BinanceWSCollector:
                 existing.taker_sell_count = buffer.taker_sell_count
                 existing.taker_buy_notional = buffer.taker_buy_notional
                 existing.taker_sell_notional = buffer.taker_sell_notional
+                existing.large_buy_notional = buffer.large_buy_notional
+                existing.large_sell_notional = buffer.large_sell_notional
+                existing.large_buy_count = buffer.large_buy_count
+                existing.large_sell_count = buffer.large_sell_count
                 existing.high_price = buffer.high_price
                 existing.low_price = buffer.low_price
             else:
@@ -303,6 +329,10 @@ class BinanceWSCollector:
                     taker_sell_count=buffer.taker_sell_count,
                     taker_buy_notional=buffer.taker_buy_notional,
                     taker_sell_notional=buffer.taker_sell_notional,
+                    large_buy_notional=buffer.large_buy_notional,
+                    large_sell_notional=buffer.large_sell_notional,
+                    large_buy_count=buffer.large_buy_count,
+                    large_sell_count=buffer.large_sell_count,
                     high_price=buffer.high_price,
                     low_price=buffer.low_price,
                 )

@@ -22,6 +22,49 @@ logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 15
 
+# Common RSS namespace prefixes
+NS_MEDIA = "http://search.yahoo.com/mrss/"
+NS_ATOM = "http://www.w3.org/2005/Atom"
+
+# Regex to extract first <img src="..."> from HTML content
+_IMG_SRC_RE = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
+
+
+def _extract_image_url(el) -> Optional[str]:
+    """
+    Extract thumbnail/preview image URL from an RSS/Atom element.
+
+    Priority order (most reliable first):
+    1. <media:content url="..."> or <media:thumbnail url="...">
+    2. <enclosure url="..." type="image/*">
+    3. <img src="..."> inside <description> or <content:encoded>
+    """
+    # 1. media:content / media:thumbnail
+    for tag in [f"{{{NS_MEDIA}}}content", f"{{{NS_MEDIA}}}thumbnail"]:
+        media_el = el.find(tag)
+        if media_el is not None:
+            url = media_el.get("url", "").strip()
+            if url:
+                return url
+
+    # 2. <enclosure> with image type
+    enclosure = el.find("enclosure")
+    if enclosure is not None:
+        enc_type = enclosure.get("type", "")
+        enc_url = enclosure.get("url", "").strip()
+        if enc_url and ("image" in enc_type or not enc_type):
+            return enc_url
+
+    # 3. Fallback: extract <img> from description/content:encoded HTML
+    for field_name in ["description", "{http://purl.org/rss/1.0/modules/content/}encoded"]:
+        html_content = el.findtext(field_name) or ""
+        if html_content:
+            match = _IMG_SRC_RE.search(html_content)
+            if match:
+                return match.group(1)
+
+    return None
+
 
 def _strip_html(text: str) -> str:
     """Remove HTML tags and normalize whitespace."""
@@ -114,12 +157,14 @@ class RSSAdapter(NewsSourceAdapter):
 
         summary = _strip_html(el.findtext("description") or "")
         published_at = _parse_rss_date(el.findtext("pubDate") or "")
+        image_url = _extract_image_url(el)
 
         return NewsItem(
             title=title,
             source_url=link,
             summary=summary[:1000] if summary else "",
             published_at=published_at,
+            image_url=image_url,
         )
 
     def _parse_atom_entry(self, el, ns: dict) -> Optional[NewsItem]:
@@ -142,10 +187,12 @@ class RSSAdapter(NewsSourceAdapter):
             or el.findtext("atom:updated", namespaces=ns)
             or ""
         )
+        image_url = _extract_image_url(el)
 
         return NewsItem(
             title=title,
             source_url=link,
             summary=summary[:1000] if summary else "",
             published_at=published_at,
+            image_url=image_url,
         )

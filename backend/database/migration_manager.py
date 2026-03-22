@@ -77,6 +77,7 @@ MIGRATIONS = [
     "insert_builtin_expression_factors.py",
     "create_news_articles_table.py",
     "add_large_order_fields.py",
+    "add_news_image_url.py",
 ]
 
 

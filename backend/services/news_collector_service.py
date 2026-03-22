@@ -374,6 +374,7 @@ class NewsCollectorService:
             symbols=json.dumps(symbols) if symbols else None,
             sentiment=sentiment,
             sentiment_source=sentiment_source,
+            image_url=item.image_url,
             raw_data=item.raw_data,
             classified=classified,
         )

@@ -19,14 +19,20 @@ export interface WorkstationArea {
   x: number; y: number; w: number; h: number; scale: number
 }
 
+export interface NewsArea {
+  x: number; y: number; w: number; h: number; scale: number
+}
+
 export interface SceneConfig {
   sceneVersion?: number
   assets: PlacedAsset[]
   animationMap: Record<string, string>
   workstationArea?: WorkstationArea
+  newsArea?: NewsArea
 }
 
 export const DEFAULT_WS_AREA: WorkstationArea = { x: 16, y: 86, w: 868, h: 460, scale: 1 }
+export const DEFAULT_NEWS_AREA: NewsArea = { x: 540, y: 100, w: 340, h: 420, scale: 0.5 }
 
 export function getWsArea(config: SceneConfig | null): WorkstationArea {
   const ws = config?.workstationArea
@@ -37,6 +43,18 @@ export function getWsArea(config: SceneConfig | null): WorkstationArea {
     w: ws.w ?? DEFAULT_WS_AREA.w,
     h: ws.h ?? DEFAULT_WS_AREA.h,
     scale: ws.scale && !isNaN(ws.scale) ? ws.scale : DEFAULT_WS_AREA.scale,
+  }
+}
+
+export function getNewsArea(config: SceneConfig | null): NewsArea {
+  const na = config?.newsArea
+  if (!na) return DEFAULT_NEWS_AREA
+  return {
+    x: na.x ?? DEFAULT_NEWS_AREA.x,
+    y: na.y ?? DEFAULT_NEWS_AREA.y,
+    w: na.w ?? DEFAULT_NEWS_AREA.w,
+    h: na.h ?? DEFAULT_NEWS_AREA.h,
+    scale: na.scale && !isNaN(na.scale) ? na.scale : DEFAULT_NEWS_AREA.scale,
   }
 }
 
@@ -93,6 +111,7 @@ export function normalizeSceneConfig(config: Partial<SceneConfig> | null | undef
       ...(input.animationMap || {}),
     },
     workstationArea: getWsArea(input as SceneConfig),
+    newsArea: getNewsArea(input as SceneConfig),
   }
 }
 
@@ -256,13 +275,16 @@ type DragMode =
   | { type: 'resize'; id: string; startX: number; startY: number; oScale: number; baseW: number; baseH: number }
   | { type: 'ws-move'; startX: number; startY: number; ox: number; oy: number }
   | { type: 'ws-resize'; startX: number; startY: number; ow: number; oh: number }
+  | { type: 'news-move'; startX: number; startY: number; ox: number; oy: number }
+  | { type: 'news-resize'; startX: number; startY: number; ow: number; oh: number }
 
-function EditorCanvas({ config, selectedId, onSelect, onUpdate, onRemove, onUpdateWsArea }: {
+function EditorCanvas({ config, selectedId, onSelect, onUpdate, onRemove, onUpdateWsArea, onUpdateNewsArea }: {
   config: SceneConfig; selectedId: string | null
   onSelect: (id: string | null) => void
   onUpdate: (id: string, patch: Partial<PlacedAsset>) => void
   onRemove: () => void
   onUpdateWsArea: (patch: Partial<WorkstationArea>) => void
+  onUpdateNewsArea: (patch: Partial<NewsArea>) => void
 }) {
   const dragRef = useRef<DragMode | null>(null)
   const selectedAsset = config.assets.find(a => a.id === selectedId)
@@ -288,6 +310,7 @@ function EditorCanvas({ config, selectedId, onSelect, onUpdate, onRemove, onUpda
   }, [])
 
   const ws = getWsArea(config)
+  const na = getNewsArea(config)
 
   const onWsDown = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -299,6 +322,17 @@ function EditorCanvas({ config, selectedId, onSelect, onUpdate, onRemove, onUpda
     e.stopPropagation()
     dragRef.current = { type: 'ws-resize', startX: e.clientX, startY: e.clientY, ow: ws.w, oh: ws.h }
   }, [ws])
+
+  const onNewsDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    onSelect(null)
+    dragRef.current = { type: 'news-move', startX: e.clientX, startY: e.clientY, ox: na.x, oy: na.y }
+  }, [na, onSelect])
+
+  const onNewsResizeDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    dragRef.current = { type: 'news-resize', startX: e.clientX, startY: e.clientY, ow: na.w, oh: na.h }
+  }, [na])
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     const d = dragRef.current
@@ -324,6 +358,16 @@ function EditorCanvas({ config, selectedId, onSelect, onUpdate, onRemove, onUpda
       onUpdateWsArea({
         w: Math.max(200, Math.min(CANVAS_W, d.ow + e.clientX - d.startX)),
         h: Math.max(150, Math.min(CANVAS_H, d.oh + e.clientY - d.startY)),
+      })
+    } else if (d.type === 'news-move') {
+      onUpdateNewsArea({
+        x: Math.max(0, Math.min(CANVAS_W - 100, d.ox + e.clientX - d.startX)),
+        y: Math.max(0, Math.min(CANVAS_H - 100, d.oy + e.clientY - d.startY)),
+      })
+    } else if (d.type === 'news-resize') {
+      onUpdateNewsArea({
+        w: Math.max(150, Math.min(CANVAS_W, d.ow + e.clientX - d.startX)),
+        h: Math.max(120, Math.min(CANVAS_H, d.oh + e.clientY - d.startY)),
       })
     }
   }, [onUpdate, onUpdateWsArea])
@@ -521,6 +565,45 @@ function EditorCanvas({ config, selectedId, onSelect, onUpdate, onRemove, onUpda
             </div>
           )
         })()}
+        {/* News area placeholder */}
+        <div className="absolute" style={{
+          left: na.x, top: na.y, width: na.w, height: na.h,
+          border: '2px dashed rgba(74,222,128,0.5)',
+          borderRadius: 6,
+          background: 'rgba(74,222,128,0.05)',
+          cursor: 'move',
+          zIndex: 5,
+          overflow: 'hidden',
+        }}
+          onMouseDown={onNewsDown}
+          onClick={e => e.stopPropagation()}>
+          <div className="absolute top-1 left-2 right-20 text-[10px] font-mono"
+            style={{ color: 'rgba(74,222,128,0.7)', zIndex: 2 }}>
+            News Zone · {na.scale}x
+          </div>
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center"
+            style={{ top: 16 }}>
+            <div className="text-[10px] font-mono text-center"
+              style={{ color: 'rgba(74,222,128,0.3)' }}>
+              Idle characters + screens
+            </div>
+          </div>
+          <div className="absolute bottom-1 left-2 flex items-center gap-1" style={{ zIndex: 2 }}
+            onClick={e => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()}>
+            <button onClick={() => onUpdateNewsArea({ scale: Math.max(0.3, Math.round((na.scale - 0.05) * 100) / 100) })}
+              className="px-1.5 py-0 text-[10px] rounded" style={{ background: 'rgba(74,222,128,0.3)', color: '#a7f3d0' }}>−</button>
+            <span className="text-[10px] font-mono" style={{ color: 'rgba(74,222,128,0.7)' }}>{na.scale}x</span>
+            <button onClick={() => onUpdateNewsArea({ scale: Math.min(2, Math.round((na.scale + 0.05) * 100) / 100) })}
+              className="px-1.5 py-0 text-[10px] rounded" style={{ background: 'rgba(74,222,128,0.3)', color: '#a7f3d0' }}>+</button>
+          </div>
+          <div onMouseDown={onNewsResizeDown} style={{
+            position: 'absolute', right: -5, bottom: -5,
+            width: 10, height: 10,
+            background: '#4ade80', border: '1px solid #fff',
+            borderRadius: 2, cursor: 'nwse-resize', zIndex: 60,
+          }} />
+        </div>
         {/* Grid overlay */}
         <div className="absolute inset-0 pointer-events-none" style={{
           backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
@@ -815,6 +898,13 @@ export default function SceneEditor() {
     }))
   }, [])
 
+  const updateNewsArea = useCallback((patch: Partial<NewsArea>) => {
+    setConfig(c => ({
+      ...c,
+      newsArea: { ...(c.newsArea || DEFAULT_NEWS_AREA), ...patch },
+    }))
+  }, [])
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
@@ -839,6 +929,7 @@ export default function SceneEditor() {
           assets: [],
           animationMap: { ...DEFAULT_ANIM_MAP },
           workstationArea: { ...DEFAULT_WS_AREA },
+          newsArea: { ...DEFAULT_NEWS_AREA },
         }))}
           className="px-3 py-1.5 rounded text-sm font-medium bg-red-900/50 text-red-300 hover:bg-red-900/70">
           Reset All
@@ -852,7 +943,7 @@ export default function SceneEditor() {
         <AssetPalette onPlace={placeItem} onCustomCrop={() => setCustomCropOpen(true)} />
         <EditorCanvas config={config} selectedId={selectedId}
           onSelect={setSelectedId} onUpdate={updateAsset} onRemove={removeSelected}
-          onUpdateWsArea={updateWsArea} />
+          onUpdateWsArea={updateWsArea} onUpdateNewsArea={updateNewsArea} />
       </div>
 
       {customCropOpen && !cropSrc && (

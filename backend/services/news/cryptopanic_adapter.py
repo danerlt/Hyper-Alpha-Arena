@@ -109,6 +109,12 @@ class CryptoPanicAdapter(NewsSourceAdapter):
                 sentiment = "bearish"
                 sentiment_source = "api"
 
+        # Extract image URL from metadata if available
+        image_url = None
+        metadata = post.get("metadata", {})
+        if isinstance(metadata, dict):
+            image_url = metadata.get("image") or metadata.get("thumbnail") or None
+
         return NewsItem(
             title=title,
             source_url=url,
@@ -117,5 +123,6 @@ class CryptoPanicAdapter(NewsSourceAdapter):
             symbols=symbols,
             sentiment=sentiment,
             sentiment_source=sentiment_source,
+            image_url=image_url,
             raw_data=json.dumps(post, default=str),
         )
