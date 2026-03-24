@@ -156,7 +156,7 @@ export default function Header({ title = 'Hyper Alpha Arena', currentAccount, sh
                   size="sm"
                   className="px-4 py-2 text-sm font-medium"
                 >
-                  {t('header.signUp', 'Sign Up')}
+                  {t('header.login', 'Login')}
                 </Button>
               )}
             </>

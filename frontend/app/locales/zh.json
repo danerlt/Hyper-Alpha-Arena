@@ -186,6 +186,7 @@
     "expires": "到期时间",
     "upgradeToVip": "升级VIP",
     "myAccount": "我的账户",
+    "login": "登录",
     "signOut": "退出登录",
     "signUp": "注册"
   },

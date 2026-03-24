@@ -26,6 +26,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [membershipLoading, setMembershipLoading] = useState(false)
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null)
 
+  const clearAuthState = () => {
+    Cookies.remove('arena_token')
+    Cookies.remove('arena_refresh_token')
+    Cookies.remove('arena_user')
+    setUser(null)
+    setMembership(null)
+  }
+
   // Function to handle token refresh
   const handleTokenRefresh = async (force: boolean = false): Promise<boolean> => {
     const currentToken = Cookies.get('arena_token')
@@ -56,11 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!tokenResponse || !tokenResponse.access_token) {
         console.error('[AuthContext] Failed to refresh token')
-        // Clear invalid tokens and redirect to login
-        Cookies.remove('arena_token')
-        Cookies.remove('arena_refresh_token')
-        Cookies.remove('arena_user')
-        setUser(null)
+        clearAuthState()
         return false
       }
 
@@ -79,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true
       } else {
         console.error('[AuthContext] Failed to get user info after token refresh')
+        clearAuthState()
         return false
       }
     } catch (error) {
@@ -211,30 +216,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const token = Cookies.get('arena_token')
         if (token) {
           console.log('[AuthContext] Page loaded/refreshed, checking token status...')
+          const refreshToken = Cookies.get('arena_refresh_token')
 
-          // Always check and refresh token on page load (handles page close/reopen scenario)
-          const refreshed = await handleTokenRefresh()
-
-          if (!refreshed) {
-            // If not refreshed (token still valid), verify it's still working
+          if (refreshToken) {
+            console.log('[AuthContext] Refresh token found, forcing token refresh on page load')
+            const refreshed = await handleTokenRefresh(true)
+            if (!refreshed) {
+              console.warn('[AuthContext] Forced refresh failed on page load, user will need to sign in again')
+              clearAuthState()
+            } else {
+              scheduleTokenRefresh()
+            }
+          } else {
+            console.log('[AuthContext] No refresh token available, falling back to existing access token')
             const userData = await getUserInfo(token)
             if (userData) {
               setUser(userData)
-              // Update cache
               Cookies.set('arena_user', JSON.stringify(userData), { expires: 7 })
-
-              // Schedule next refresh based on current token
               scheduleTokenRefresh()
             } else {
-              // Token invalid, clear cache
-              Cookies.remove('arena_token')
-              Cookies.remove('arena_refresh_token')
-              Cookies.remove('arena_user')
-              setUser(null)
+              clearAuthState()
             }
-          } else {
-            // Token was refreshed, schedule next refresh based on new token
-            scheduleTokenRefresh()
           }
         }
       } catch (error) {

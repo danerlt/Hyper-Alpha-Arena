@@ -183,6 +183,7 @@
     "expires": "Expires",
     "upgradeToVip": "Upgrade to VIP",
     "myAccount": "My Account",
+    "login": "Login",
     "signOut": "Sign Out",
     "signUp": "Sign Up"
   },
